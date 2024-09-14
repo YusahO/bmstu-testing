@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MewingPad.Common.Entities\MewingPad.Common.Entities.csproj" />
+    <ProjectReference Include="..\MewingPad.Common.Enums\MewingPad.Common.Enums.csproj" />
+    <ProjectReference Include="..\MewingPad.Common.Exceptions\MewingPad.Common.Exceptions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
