@@ -5,39 +5,37 @@ using MewingPad.Tests.DataAccess.UnitTests.Builders;
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
 [Collection("Test Database")]
-public class TestTagRepository : BaseRepositoryTestClass
+public class TestUserRepository : BaseRepositoryTestClass
 {
-    private readonly TagRepository _repository;
+    private readonly UserRepository _repository;
 
-    public TestTagRepository(DatabaseFixture fixture)
+    public TestUserRepository(DatabaseFixture fixture)
         : base(fixture)
     {
         _repository = new(Fixture.CreateContext());
     }
 
     [Fact]
-    public async void AddTag_AddSingle_Ok()
+    public async void AddUser_AddSingle_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
         var expectedId = MakeGuid(1);
         var expectedAuthorId = DefaultUserId;
-        const string expectedName = "Tag";
+        const string expectedName = "User";
 
-        var tag = new TagCoreModelBuilder()
+        var user = new UserCoreModelBuilder()
             .WithId(expectedId)
             .WithAuthorId(expectedAuthorId)
             .WithName(expectedName)
             .Build();
 
         // Act
-        await _repository.AddTag(tag);
+        await _repository.AddUser(user);
 
         // Assert
-        var actual = (from a in context.Tags select a).ToList();
+        var actual = (from a in context.Users select a).ToList();
         Assert.Single(actual);
         Assert.Equal(expectedId, actual[0].Id);
         Assert.Equal(expectedAuthorId, actual[0].AuthorId);
@@ -45,79 +43,79 @@ public class TestTagRepository : BaseRepositoryTestClass
     }
 
     [Fact]
-    public async void AddTag_AddWithSameId_Error()
+    public async void AddUser_AddWithSameId_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
         await AddDefaultUserWithPlaylist();
 
-        var tag = new TagCoreModelBuilder()
+        var user = new UserCoreModelBuilder()
             .WithId(MakeGuid(1))
             .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
+            .WithName("User")
             .Build();
-        await context.Tags.AddAsync(
-            new TagDbModelBuilder()
-                .WithId(tag.Id)
-                .WithAuthorId(tag.AuthorId)
-                .WithName(tag.Name)
+        await context.Users.AddAsync(
+            new UserDbModelBuilder()
+                .WithId(user.Id)
+                .WithAuthorId(user.AuthorId)
+                .WithName(user.Name)
                 .Build()
         );
         await context.SaveChangesAsync();
 
         // Act
-        async Task Action() => await _repository.AddTag(tag);
+        async Task Action() => await _repository.AddUser(user);
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
     [Fact]
-    public async void DeleteTag_DeleteExisting_Ok()
+    public async void DeleteUser_DeleteExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
         await AddDefaultUserWithPlaylist();
 
-        var tag = new TagCoreModelBuilder()
+        var user = new UserCoreModelBuilder()
             .WithId(MakeGuid(1))
             .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
+            .WithName("User")
             .Build();
-        await context.Tags.AddAsync(
-            new TagDbModelBuilder()
-                .WithId(tag.Id)
-                .WithAuthorId(tag.AuthorId)
-                .WithName(tag.Name)
+        await context.Users.AddAsync(
+            new UserDbModelBuilder()
+                .WithId(user.Id)
+                .WithAuthorId(user.AuthorId)
+                .WithName(user.Name)
                 .Build()
         );
         await context.SaveChangesAsync();
 
         // Act
-        await _repository.DeleteTag(tag.Id);
+        await _repository.DeleteUser(user.Id);
 
         // Assert
-        Assert.Empty((from a in context.Tags select a).ToList());
+        Assert.Empty((from a in context.Users select a).ToList());
     }
 
     [Fact]
-    public async void DeleteTag_DeleteNonexistent_Error()
+    public async void DeleteUser_DeleteNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
 
         // Act
-        async Task Action() => await _repository.DeleteTag(new Guid());
+        async Task Action() => await _repository.DeleteUser(new Guid());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
     [Fact]
-    public async void UpdateTag_UpdateExisting_Ok()
+    public async void UpdateUser_UpdateExisting_Ok()
     {
         // Arrange
         await AddDefaultUserWithPlaylist();
@@ -126,32 +124,32 @@ public class TestTagRepository : BaseRepositoryTestClass
         var expectedAuthorId = DefaultUserId;
         const string expectedName = "New";
 
-        var tag = new TagCoreModelBuilder()
+        var user = new UserCoreModelBuilder()
             .WithId(expectedId)
             .WithAuthorId(expectedAuthorId)
-            .WithName("Tag")
+            .WithName("User")
             .Build();
         using (var context = Fixture.CreateContext())
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
-                    .WithId(tag.Id)
-                    .WithAuthorId(tag.AuthorId)
-                    .WithName(tag.Name)
+            await context.Users.AddAsync(
+                new UserDbModelBuilder()
+                    .WithId(user.Id)
+                    .WithAuthorId(user.AuthorId)
+                    .WithName(user.Name)
                     .Build()
             );
             await context.SaveChangesAsync();
         }
 
-        tag.Name = "New";
+        user.Name = "New";
 
         // Act
-        await _repository.UpdateTag(tag);
+        await _repository.UpdateUser(user);
 
         // Assert
         using (var context = Fixture.CreateContext())
         {
-            var actual = (from a in context.Tags select a).ToList();
+            var actual = (from a in context.Users select a).ToList();
             Assert.Single(actual);
             Assert.Equal(expectedId, actual[0].Id);
             Assert.Equal(expectedName, actual[0].Name);
@@ -160,28 +158,28 @@ public class TestTagRepository : BaseRepositoryTestClass
     }
 
     [Fact]
-    public async void UpdateTag_UpdateNonexistent_Error()
+    public async void UpdateUser_UpdateNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
         await AddDefaultUserWithPlaylist();
 
-        var tag = new TagCoreModelBuilder()
+        var user = new UserCoreModelBuilder()
             .WithId(MakeGuid(1))
             .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
+            .WithName("User")
             .Build();
 
         // Act
-        async Task Action() => await _repository.UpdateTag(tag);
+        async Task Action() => await _repository.UpdateUser(user);
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
     [Fact]
-    public async void GetTagById_TagWithIdExists_ReturnsTag()
+    public async void GetUserById_UserWithIdExists_ReturnsUser()
     {
         using var context = Fixture.CreateContext();
 
@@ -190,22 +188,22 @@ public class TestTagRepository : BaseRepositoryTestClass
 
         var expectedId = MakeGuid(2);
         var expectedAuthorId = DefaultUserId;
-        const string expectedName = "Tag2";
+        const string expectedName = "User2";
 
         for (byte i = 1; i < 4; ++i)
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
+            await context.Users.AddAsync(
+                new UserDbModelBuilder()
                     .WithId(MakeGuid(i))
                     .WithAuthorId(expectedAuthorId)
-                    .WithName($"Tag{i}")
+                    .WithName($"User{i}")
                     .Build()
             );
         }
         await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetTagById(expectedId);
+        var actual = await _repository.GetUserById(expectedId);
 
         // Assert
         Assert.NotNull(actual);
@@ -215,7 +213,7 @@ public class TestTagRepository : BaseRepositoryTestClass
     }
 
     [Fact]
-    public async void GetTagById_NoTagWithId_ReturnsNull()
+    public async void GetUserById_NoUserWithId_ReturnsNull()
     {
         using var context = Fixture.CreateContext();
 
@@ -226,37 +224,37 @@ public class TestTagRepository : BaseRepositoryTestClass
 
         for (byte i = 1; i < 4; ++i)
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
+            await context.Users.AddAsync(
+                new UserDbModelBuilder()
                     .WithId(MakeGuid(i))
                     .WithAuthorId(DefaultUserId)
-                    .WithName($"Tag{i}")
+                    .WithName($"User{i}")
                     .Build()
             );
         }
         await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetTagById(expectedId);
+        var actual = await _repository.GetUserById(expectedId);
 
         // Assert
         Assert.Null(actual);
     }
 
     [Fact]
-    public async void GetTagById_NoTags_Ok()
+    public async void GetUserById_NoUsers_Ok()
     {
         // Arrange
 
         // Act
-        var actual = await _repository.GetTagById(new Guid());
+        var actual = await _repository.GetUserById(new Guid());
 
         // Assert
         Assert.Null(actual);
     }
 
     [Fact]
-    public async void GetAllTags_TagsExist_ReturnsTags()
+    public async void GetAllUsers_UsersExist_ReturnsUsers()
     {
         using var context = Fixture.CreateContext();
 
@@ -265,30 +263,30 @@ public class TestTagRepository : BaseRepositoryTestClass
 
         for (byte i = 1; i < 4; ++i)
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
+            await context.Users.AddAsync(
+                new UserDbModelBuilder()
                     .WithId(MakeGuid(i))
                     .WithAuthorId(DefaultUserId)
-                    .WithName($"Tag{i}")
+                    .WithName($"User{i}")
                     .Build()
             );
         }
         await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetAllTags();
+        var actual = await _repository.GetAllUsers();
 
         // Assert
         Assert.Equal(3, actual.Count);
     }
 
     [Fact]
-    public async void GetAllTags_NoTagsExist_ReturnsEmpty()
+    public async void GetAllUsers_NoUsersExist_ReturnsEmpty()
     {
         // Arrange
 
         // Act
-        var actual = await _repository.GetAllTags();
+        var actual = await _repository.GetAllUsers();
 
         // Assert
         Assert.Empty(actual);

@@ -1,10 +1,10 @@
-using Microsoft.EntityFrameworkCore;
 using MewingPad.Common.Entities;
+using MewingPad.Common.Exceptions;
 using MewingPad.Common.IRepositories;
 using MewingPad.Database.Context;
 using MewingPad.Database.Models.Converters;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
-using MewingPad.Common.Exceptions;
 
 namespace MewingPad.Database.NpgsqlRepositories;
 
@@ -37,7 +37,9 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
 
         try
         {
-            var scoreDbModel = await _context.Scores.FindAsync([authorId, audiotrackId]);
+            var scoreDbModel = await _context.Scores.FindAsync(
+                [authorId, audiotrackId]
+            );
             _context.Scores.Remove(scoreDbModel!);
             await _context.SaveChangesAsync();
         }
@@ -56,9 +58,9 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
         List<Score> scores;
         try
         {
-            scores = await _context.Scores
-                    .Select(s => ScoreConverter.DbToCoreModel(s))
-                    .ToListAsync();
+            scores = await _context
+                .Scores.Select(s => ScoreConverter.DbToCoreModel(s))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -76,10 +78,10 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
         List<Score> scores;
         try
         {
-            scores = await _context.Scores
-                    .Where(s => s.AudiotrackId == audiotrackId)
-                    .Select(s => ScoreConverter.DbToCoreModel(s))
-                    .ToListAsync();
+            scores = await _context
+                .Scores.Where(s => s.AudiotrackId == audiotrackId)
+                .Select(s => ScoreConverter.DbToCoreModel(s))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -90,14 +92,19 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
         return scores!;
     }
 
-    public async Task<Score?> GetScoreByPrimaryKey(Guid authorId, Guid audiotrackId)
+    public async Task<Score?> GetScoreByPrimaryKey(
+        Guid authorId,
+        Guid audiotrackId
+    )
     {
         _logger.Verbose("Entering GetScoreByPrimaryKey");
 
         Score? score;
         try
         {
-            var scoreDbModel = await _context.Scores.FindAsync([authorId, audiotrackId]);
+            var scoreDbModel = await _context.Scores.FindAsync(
+                [authorId, audiotrackId]
+            );
             score = ScoreConverter.DbToCoreModel(scoreDbModel);
         }
         catch (Exception ex)
@@ -115,7 +122,9 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
 
         try
         {
-            var scoreDbModel = await _context.Scores.FindAsync([score.AuthorId, score.AudiotrackId]);
+            var scoreDbModel = await _context.Scores.FindAsync(
+                [score.AuthorId, score.AudiotrackId]
+            );
 
             scoreDbModel!.AuthorId = score.AuthorId;
             scoreDbModel!.AudiotrackId = score.AudiotrackId;

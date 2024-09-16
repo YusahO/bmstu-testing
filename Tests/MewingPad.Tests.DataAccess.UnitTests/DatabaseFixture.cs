@@ -10,10 +10,6 @@ public class DatabaseFixture
     private const string ConnectionString =
         @"User ID=postgres;Password=postgres;Server=localhost;Database=MewingPadDBTest;";
 
-    public Guid DefaultUserId { get; } = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 1]);
-    public Guid DefaultFavouriteId { get; } =
-        new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 1]);
-
     public MewingPadDbContext CreateContext() =>
         new MewingPadDbContext(
             new DbContextOptionsBuilder<MewingPadDbContext>()
@@ -39,21 +35,8 @@ public class DatabaseFixture
         context.Playlists.RemoveRange(context.Playlists);
         context.UsersFavourites.RemoveRange(context.UsersFavourites);
         context.SaveChanges();
-
-        var user = new UserDbModelBuilder().WithId(DefaultUserId).Build();
-        var favourite = new PlaylistDbModelBuilder()
-            .WithId(DefaultFavouriteId)
-            .WithTitle("Favourites")
-            .WithUserId(user.Id)
-            .Build();
-        context.Users.Add(user);
-        context.Playlists.Add(favourite);
-        context.UsersFavourites.Add(
-            new UserFavouriteDbModel(user.Id, favourite.Id)
-        );
-        context.SaveChanges();
     }
 }
 
-[CollectionDefinition("Test Database")]
+[CollectionDefinition("Test Database", DisableParallelization = true)]
 public class DatabaseCollection : ICollectionFixture<DatabaseFixture> { }

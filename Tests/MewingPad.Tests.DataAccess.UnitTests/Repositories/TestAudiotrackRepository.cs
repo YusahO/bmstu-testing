@@ -1,34 +1,32 @@
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
 using MewingPad.Tests.DataAccess.UnitTests.Builders;
-using Microsoft.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
 [Collection("Test Database")]
-public class TestAudiotrackRepository : IDisposable
+public class TestAudiotrackRepository : BaseRepositoryTestClass
 {
-    public DatabaseFixture Fixture { get; }
     private readonly AudiotrackRepository _repository;
 
     public TestAudiotrackRepository(DatabaseFixture fixture)
+        : base(fixture)
     {
-        Fixture = fixture;
         _repository = new(Fixture.CreateContext());
     }
 
-    public void Dispose() => Fixture.Cleanup();
-
     [Fact]
-    public async Task TestAddSingleAudiotrack_Ok()
+    public async Task AddAudiotrack_AddSingle_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
         var audiotrack = new AudiotrackCoreModelBuilder()
             .WithId(Guid.NewGuid())
             .WithTitle("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
+            .WithAuthorId(DefaultUserId)
             .WithFilepath("/path/to/file")
             .Build();
 
@@ -45,28 +43,27 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestAddAudiotrackToMany_Ok()
+    public async Task AddAudiotrack_AddToExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        for (int i = 1; i < 4; ++i)
-        {
-            await context.Audiotracks.AddAsync(
-                new AudiotrackDbModelBuilder()
-                    .WithId(Guid.NewGuid())
-                    .WithTitle($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithFilepath($"/path/to/file{i}")
-                    .Build()
-            );
-        }
+        await AddDefaultUserWithPlaylist();
+
+        await context.Audiotracks.AddAsync(
+            new AudiotrackDbModelBuilder()
+                .WithId(Guid.NewGuid())
+                .WithTitle($"HelloAnother")
+                .WithAuthorId(DefaultUserId)
+                .WithFilepath($"/path/to/file_another")
+                .Build()
+        );
         await context.SaveChangesAsync();
 
         var audiotrack = new AudiotrackCoreModelBuilder()
             .WithId(Guid.NewGuid())
             .WithTitle("New")
-            .WithAuthorId(Fixture.DefaultUserId)
+            .WithAuthorId(DefaultUserId)
             .WithFilepath("/path/to/new")
             .Build();
 
@@ -75,19 +72,21 @@ public class TestAudiotrackRepository : IDisposable
 
         // Assert
         var actual = (from a in context.Audiotracks select a).ToList();
-        Assert.Equal(4, actual.Count);
+        Assert.Equal(2, actual.Count);
     }
 
     [Fact]
-    public async Task TestAddAudiotrack_SameAudiotrackError()
+    public async Task AddAudiotrack_AddAudiotrackWithSameId_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
         var audiotrack = new AudiotrackCoreModelBuilder()
             .WithId(Guid.NewGuid())
             .WithTitle("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
+            .WithAuthorId(DefaultUserId)
             .WithFilepath("/path/to/file")
             .Build();
         await context.Audiotracks.AddAsync(
@@ -108,15 +107,19 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestDeleteAudiotrack_Ok()
+    public async Task DeleteAudiotrack_DeleteExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var audiotrackId = MakeGuid(1);
+
         var audiotrack = new AudiotrackCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(audiotrackId)
             .WithTitle("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
+            .WithAuthorId(DefaultUserId)
             .WithFilepath("/path/to/file")
             .Build();
         await context.Audiotracks.AddAsync(
@@ -130,14 +133,14 @@ public class TestAudiotrackRepository : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        await _repository.DeleteAudiotrack(audiotrack.Id);
+        await _repository.DeleteAudiotrack(audiotrackId);
 
         // Assert
         Assert.Empty((from a in context.Audiotracks select a).ToList());
     }
 
     [Fact]
-    public async Task TestDeleteAudiotrack_NonexistentError()
+    public async Task DeleteAudiotrack_DeleteNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
@@ -151,20 +154,27 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestUpdateAudiotrack_Ok()
+    public async Task UpdateAudiotrack_UpdateExisting_Ok()
     {
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(1);
+        Guid expectedAuthorId = DefaultUserId;
+        const string expectedFilepath = "/path/to/file";
+        const string expectedTitle = "New";
+
         var audiotrack = new AudiotrackCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(expectedId)
             .WithTitle("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithFilepath("/path/to/file")
+            .WithAuthorId(DefaultUserId)
+            .WithFilepath(expectedFilepath)
             .Build();
         using (var context = Fixture.CreateContext())
         {
             context.Audiotracks.Add(
                 new AudiotrackDbModelBuilder()
-                    .WithId(audiotrack.Id)
+                    .WithId(expectedId)
                     .WithTitle(audiotrack.Title)
                     .WithAuthorId(audiotrack.AuthorId)
                     .WithFilepath(audiotrack.Filepath)
@@ -173,7 +183,7 @@ public class TestAudiotrackRepository : IDisposable
             await context.SaveChangesAsync();
         }
 
-        audiotrack.Title = "New";
+        audiotrack.Title = expectedTitle;
 
         // Act
         await _repository.UpdateAudiotrack(audiotrack);
@@ -181,23 +191,23 @@ public class TestAudiotrackRepository : IDisposable
         // Assert
         using (var context = Fixture.CreateContext())
         {
-            var actual = context
-                .Audiotracks.Where(x => x.Id == audiotrack.Id)
-                .ToList();
+            var actual = (from a in context.Audiotracks select a).ToList();
             Assert.Single(actual);
-            Assert.Equal(audiotrack.Id, actual[0].Id);
-            Assert.Equal("New", actual[0].Title);
-            Assert.Equal(audiotrack.AuthorId, actual[0].AuthorId);
-            Assert.Equal(audiotrack.Filepath, actual[0].Filepath);
+            Assert.Equal(expectedId, actual[0].Id);
+            Assert.Equal(expectedTitle, actual[0].Title);
+            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
+            Assert.Equal(expectedFilepath, actual[0].Filepath);
         }
     }
 
     [Fact]
-    public async Task TestUpdateAudiotrack_NonexistentError()
+    public async Task UpdateAudiotrack_UpdateNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
         var audiotrack = new AudiotrackCoreModelBuilder()
             .WithId(new Guid())
             .WithTitle("Hello")
@@ -213,7 +223,7 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestGetAllAudiotracksEmpty_Ok()
+    public async Task GetAllAudiotracks_NoAudiotracks_ReturnsEmpty()
     {
         using var context = Fixture.CreateContext();
 
@@ -227,18 +237,20 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestGetAllAudiotracksSome_Ok()
+    public async Task GetAllAudiotracks_AudiotracksExist_ReturnsAudiotracks()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        for (int i = 1; i < 4; ++i)
+        await AddDefaultUserWithPlaylist();
+
+        for (byte i = 1; i < 4; ++i)
         {
             await context.Audiotracks.AddAsync(
                 new AudiotrackDbModelBuilder()
-                    .WithId(Guid.NewGuid())
+                    .WithId(MakeGuid(i))
                     .WithTitle($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
+                    .WithAuthorId(DefaultUserId)
                     .WithFilepath($"/path/to/file{i}")
                     .Build()
             );
@@ -253,19 +265,24 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestGetAudiotrackById_Ok()
+    public async Task GetAudiotrackById_AudiotrackExists_ReturnsAudiotrack()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 2]);
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = MakeGuid(2);
+        const string expectedTitle = "Hello2";
+        const string expectedFilepath = "/path/to/file2";
+
         for (byte i = 1; i < 4; ++i)
         {
             await context.Audiotracks.AddAsync(
                 new AudiotrackDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
+                    .WithId(MakeGuid(i))
                     .WithTitle($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
+                    .WithAuthorId(DefaultUserId)
                     .WithFilepath($"/path/to/file{i}")
                     .Build()
             );
@@ -278,30 +295,29 @@ public class TestAudiotrackRepository : IDisposable
         // Assert
         Assert.NotNull(actual);
         Assert.Equal(expectedId, actual.Id);
-        Assert.Equal("Hello2", actual.Title);
-        Assert.Equal(Fixture.DefaultUserId, actual.AuthorId);
-        Assert.Equal("/path/to/file2", actual.Filepath);
+        Assert.Equal(expectedTitle, actual.Title);
+        Assert.Equal(DefaultUserId, actual.AuthorId);
+        Assert.Equal(expectedFilepath, actual.Filepath);
     }
 
     [Fact]
-    public async Task TestGetAudiotrackById_NoneFoundOk()
+    public async Task GetAudiotrackById_NoSuchAudiotrack_ReturnsNull()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 4]);
-        for (byte i = 1; i < 4; ++i)
-        {
-            Console.WriteLine(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]));
-            // await context.Audiotracks.AddAsync(
-            //     new AudiotrackDbModelBuilder()
-            //         .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-            //         .WithTitle($"Hello{i}")
-            //         .WithAuthorId(Fixture.DefaultUserId)
-            //         .WithFilepath($"/path/to/file{i}")
-            //         .Build()
-            // );
-        }
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = MakeGuid(2);
+
+        await context.Audiotracks.AddAsync(
+            new AudiotrackDbModelBuilder()
+                .WithId(MakeGuid(1))
+                .WithTitle($"Hello")
+                .WithAuthorId(DefaultUserId)
+                .WithFilepath($"/path/to/file")
+                .Build()
+        );
         await context.SaveChangesAsync();
 
         // Act
@@ -312,7 +328,7 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestGetAudiotrackByIdEmpty_Ok()
+    public async Task GetAudiotrackById_NoAudiotracks_ReturnsNull()
     {
         using var context = Fixture.CreateContext();
 
@@ -326,48 +342,55 @@ public class TestAudiotrackRepository : IDisposable
     }
 
     [Fact]
-    public async Task TestGetAudiotrackByTitle_SingleOk()
+    public async Task GetAudiotracksByTitle_OneAudiotrackWithTitle_ReturnsAudiotrack()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        for (byte i = 1; i < 4; ++i)
-        {
-            await context.Audiotracks.AddAsync(
-                new AudiotrackDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithTitle($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithFilepath($"/path/to/file{i}")
-                    .Build()
-            );
-        }
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = MakeGuid(1);
+        const string expectedTitle = "Hello";
+        const string expectedFilepath = "/path/to/file";
+
+        await context.Audiotracks.AddAsync(
+            new AudiotrackDbModelBuilder()
+                .WithId(expectedId)
+                .WithTitle($"Hello")
+                .WithAuthorId(DefaultUserId)
+                .WithFilepath($"/path/to/file")
+                .Build()
+        );
         await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetAudiotracksByTitle("Hello2");
+        var actual = await _repository.GetAudiotracksByTitle(expectedTitle);
 
         // Assert
         Assert.Single(actual);
-        Assert.Equal(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 2]), actual[0].Id);
-        Assert.Equal("Hello2", actual[0].Title);
-        Assert.Equal(Fixture.DefaultUserId, actual[0].AuthorId);
-        Assert.Equal("/path/to/file2", actual[0].Filepath);
+        Assert.Equal(expectedId, actual[0].Id);
+        Assert.Equal(expectedTitle, actual[0].Title);
+        Assert.Equal(DefaultUserId, actual[0].AuthorId);
+        Assert.Equal(expectedFilepath, actual[0].Filepath);
     }
 
     [Fact]
-    public async Task TestGetAudiotrackByTitle_SomeOk()
+    public async Task GetAudiotracksByTitle_SomeAudiotracksWithTitle_ReturnsAudiotracks()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        const string expectedTitle = "Hello";
+        const int expectedCount = 3;
+
         for (byte i = 1; i < 4; ++i)
         {
             await context.Audiotracks.AddAsync(
                 new AudiotrackDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
+                    .WithId(MakeGuid(i))
                     .WithTitle($"Hello")
-                    .WithAuthorId(Fixture.DefaultUserId)
+                    .WithAuthorId(DefaultUserId)
                     .WithFilepath($"/path/to/file")
                     .Build()
             );
@@ -375,38 +398,42 @@ public class TestAudiotrackRepository : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetAudiotracksByTitle("Hello");
+        var actual = await _repository.GetAudiotracksByTitle(expectedTitle);
 
         // Assert
-        Assert.Equal(3, actual.Count);
-        Assert.All(actual, (audio) => Assert.Equal("Hello", audio.Title));
+        Assert.Equal(expectedCount, actual.Count);
+        Assert.All(actual, (audio) => Assert.Equal(expectedTitle, audio.Title));
     }
 
     [Fact]
-    public async Task TestGetAudiotrackByTitle_NoneFoundOk()
+    public async Task GetAudiotracksByTitle_NoAudiotracksWithTitle_ReturnsEmpty()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 4]);
-        for (byte i = 1; i < 4; ++i)
+        await AddDefaultUserWithPlaylist();
+
+        const string expectedTitle = "aaaa";
+
+        using (var context = Fixture.CreateContext())
         {
-            await context.Audiotracks.AddAsync(
-                new AudiotrackDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithTitle($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithFilepath($"/path/to/file{i}")
-                    .Build()
-            );
+            for (byte i = 1; i < 4; ++i)
+            {
+                await context.Audiotracks.AddAsync(
+                    new AudiotrackDbModelBuilder()
+                        .WithId(MakeGuid(i))
+                        .WithTitle($"Hello{i}")
+                        .WithAuthorId(DefaultUserId)
+                        .WithFilepath($"/path/to/file{i}")
+                        .Build()
+                );
+            }
+            await context.SaveChangesAsync();
         }
-        await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetAudiotrackById(expectedId);
+        var actual = await _repository.GetAudiotracksByTitle(expectedTitle);
 
         // Assert
-        Assert.Null(actual);
+        Assert.Empty(actual);
     }
 
     [Fact]

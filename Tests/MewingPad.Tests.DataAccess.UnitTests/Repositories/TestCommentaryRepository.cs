@@ -5,53 +5,32 @@ using MewingPad.Tests.DataAccess.UnitTests.Builders;
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
 [Collection("Test Database")]
-public class TestCommentaryRepository : IDisposable
+public class TestCommentaryRepository : BaseRepositoryTestClass
 {
-    public DatabaseFixture Fixture { get; }
-    public Guid AudiotrackId { get; } = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 1]);
-
     private readonly CommentaryRepository _repository;
 
-    private void AddAudiotrack()
-    {
-        using var context = Fixture.CreateContext();
-        context.Audiotracks.RemoveRange(context.Audiotracks);
-        context.SaveChanges();
-
-        var audiotrack = new AudiotrackDbModelBuilder()
-            .WithId(AudiotrackId)
-            .WithTitle("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithFilepath("/path/to/file")
-            .Build();
-        context.Audiotracks.Add(audiotrack);
-        context.SaveChanges();
-    }
-
     public TestCommentaryRepository(DatabaseFixture fixture)
+        : base(fixture)
     {
-        Fixture = fixture;
         _repository = new(Fixture.CreateContext());
-        AddAudiotrack();
-    }
-
-    public void Dispose()
-    {
-        Fixture.Cleanup();
-        AddAudiotrack();
     }
 
     [Fact]
-    public async void TestAddCommentary_Ok()
+    public async void AddCommentary_AddSingle_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(1);
+
         var commentary = new CommentaryCoreModelBuilder()
-            .WithId(Guid.NewGuid())
-            .WithText("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithAudiotrackId(AudiotrackId)
+            .WithId(expectedId)
+            .WithText("Text")
+            .WithAuthorId(DefaultUserId)
+            .WithAudiotrackId(DefaultAudiotrackId)
             .Build();
 
         // Act
@@ -63,16 +42,21 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestAddCommentary_SameCommentaryError()
+    public async void AddCommentary_AddCommentaryWithSameId_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(1);
+
         var commentary = new CommentaryCoreModelBuilder()
-            .WithId(Guid.NewGuid())
-            .WithText("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithAudiotrackId(AudiotrackId)
+            .WithId(expectedId)
+            .WithText("Text")
+            .WithAuthorId(DefaultUserId)
+            .WithAudiotrackId(DefaultAudiotrackId)
             .Build();
         await context.Commentaries.AddAsync(
             new CommentaryDbModelBuilder()
@@ -92,16 +76,21 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestDeleteCommentary_Ok()
+    public async void DeleteCommentary_DeleteExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(1);
+
         var commentary = new CommentaryCoreModelBuilder()
-            .WithId(Guid.NewGuid())
-            .WithText("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithAudiotrackId(AudiotrackId)
+            .WithId(expectedId)
+            .WithText("Text")
+            .WithAuthorId(DefaultUserId)
+            .WithAudiotrackId(DefaultAudiotrackId)
             .Build();
         await context.Commentaries.AddAsync(
             new CommentaryDbModelBuilder()
@@ -121,7 +110,7 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestDeleteCommentary_NonexistentError()
+    public async void DeleteCommentary_DeleteNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
@@ -135,18 +124,26 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestUpdateCommentary_Ok()
+    public async void UpdateCommentary_UpdateExisting_Ok()
     {
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(1);
+        Guid expectedAuthorId = DefaultUserId;
+        Guid expectedAudiotrackId = DefaultAudiotrackId;
+        const string expectedText = "New";
+
         var commentary = new CommentaryCoreModelBuilder()
-            .WithId(Guid.NewGuid())
-            .WithText("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithAudiotrackId(AudiotrackId)
+            .WithId(expectedId)
+            .WithText("Text")
+            .WithAuthorId(DefaultUserId)
+            .WithAudiotrackId(DefaultAudiotrackId)
             .Build();
         using (var context = Fixture.CreateContext())
         {
-            context.Commentaries.Add(
+            await context.Commentaries.AddAsync(
                 new CommentaryDbModelBuilder()
                     .WithId(commentary.Id)
                     .WithText(commentary.Text)
@@ -154,10 +151,10 @@ public class TestCommentaryRepository : IDisposable
                     .WithAudiotrackId(commentary.AudiotrackId)
                     .Build()
             );
-            context.SaveChanges();
+            await context.SaveChangesAsync();
         }
 
-        commentary.Text = "New";
+        commentary.Text = expectedText;
 
         // Act
         await _repository.UpdateCommentary(commentary);
@@ -167,24 +164,29 @@ public class TestCommentaryRepository : IDisposable
         {
             var actual = (from a in context.Commentaries select a).ToList();
             Assert.Single(actual);
-            Assert.Equal(commentary.Id, actual[0].Id);
-            Assert.Equal("New", actual[0].Text);
-            Assert.Equal(commentary.AuthorId, actual[0].AuthorId);
-            Assert.Equal(commentary.AudiotrackId, actual[0].AudiotrackId);
+            Assert.Equal(expectedId, actual[0].Id);
+            Assert.Equal(expectedText, actual[0].Text);
+            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
+            Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
         }
     }
 
     [Fact]
-    public async void TestUpdateCommentary_NonexistentError()
+    public async void UpdateCommentary_UpdateNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(1);
+
         var commentary = new CommentaryCoreModelBuilder()
-            .WithId(Guid.NewGuid())
-            .WithText("Hello")
-            .WithAuthorId(Fixture.DefaultUserId)
-            .WithAudiotrackId(AudiotrackId)
+            .WithId(expectedId)
+            .WithText("Text")
+            .WithAuthorId(DefaultUserId)
+            .WithAudiotrackId(DefaultAudiotrackId)
             .Build();
 
         // Act
@@ -195,62 +197,84 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestGetAudiotrackCommentaries_EmptyOk()
+    public async void GetAudiotrackCommentaries_NoCommentaries_ReturnsEmpty()
     {
         // Arrange
 
         // Act
-        var actual = await _repository.GetAudiotrackCommentaries(AudiotrackId);
+        var actual = await _repository.GetAudiotrackCommentaries(
+            DefaultAudiotrackId
+        );
 
         // Assert
         Assert.Empty(actual);
     }
 
     [Fact]
-    public async void TestGetAudiotrackCommentaries_SomeOk()
+    public async void GetAudiotrackCommentaries_CommetariesExist_ReturnsCommentaries()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        for (int i = 0; i < 3; ++i)
-        {
-            await context.Commentaries.AddAsync(
-                new CommentaryDbModelBuilder()
-                    .WithId(Guid.NewGuid())
-                    .WithText("Hello")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithAudiotrackId(AudiotrackId)
-                    .Build()
-            );
-        }
-        context.SaveChanges();
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
 
-        // Act
-        var actual = await _repository.GetAudiotrackCommentaries(AudiotrackId);
+        var expectedId = MakeGuid(1);
+        Guid expectedAudiotrackId = DefaultAudiotrackId;
 
-        // Assert
-        Assert.Equal(3, actual.Count);
-    }
-
-    [Fact]
-    public async void TestGetCommentaryById_Ok()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 2]);
         for (byte i = 1; i < 4; ++i)
         {
             await context.Commentaries.AddAsync(
                 new CommentaryDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithText($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithAudiotrackId(AudiotrackId)
+                    .WithId(MakeGuid(i))
+                    .WithText("Text")
+                    .WithAuthorId(DefaultUserId)
+                    .WithAudiotrackId(DefaultAudiotrackId)
                     .Build()
             );
         }
-        context.SaveChanges();
+        await context.SaveChangesAsync();
+
+        // Act
+        var actual = await _repository.GetAudiotrackCommentaries(
+            DefaultAudiotrackId
+        );
+
+        // Assert
+        Assert.Equal(3, actual.Count);
+        Assert.All(
+            actual,
+            commentary =>
+                Assert.Equal(expectedAudiotrackId, commentary.AudiotrackId)
+        );
+    }
+
+    [Fact]
+    public async void GetCommentaryById_CommentariesExist_ReturnsCommentary()
+    {
+        using var context = Fixture.CreateContext();
+
+        // Arrange
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(3);
+        var expectedAuthorId = DefaultUserId;
+        var expectedAudiotrackId = DefaultAudiotrackId;
+        const string expectedText = "Text3";
+
+        for (byte i = 1; i < 4; ++i)
+        {
+            await context.Commentaries.AddAsync(
+                new CommentaryDbModelBuilder()
+                    .WithId(MakeGuid(i))
+                    .WithText($"Text{i}")
+                    .WithAuthorId(DefaultUserId)
+                    .WithAudiotrackId(DefaultAudiotrackId)
+                    .Build()
+            );
+        }
+        await context.SaveChangesAsync();
 
         // Act
         var actual = await _repository.GetCommentaryById(expectedId);
@@ -258,26 +282,30 @@ public class TestCommentaryRepository : IDisposable
         // Assert
         Assert.NotNull(actual);
         Assert.Equal(expectedId, actual.Id);
-        Assert.Equal("Hello2", actual.Text);
-        Assert.Equal(Fixture.DefaultUserId, actual.AuthorId);
-        Assert.Equal(AudiotrackId, actual.AudiotrackId);
+        Assert.Equal(expectedText, actual.Text);
+        Assert.Equal(expectedAuthorId, actual.AuthorId);
+        Assert.Equal(expectedAudiotrackId, actual.AudiotrackId);
     }
 
     [Fact]
-    public async void TestGetCommentaryById_NoneFoundOk()
+    public async void GetCommentaryById_NoCommentariesWithId_ReturnsNull()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 5]);
+        await AddDefaultUserWithPlaylist();
+        await AddDefaultAudiotrack();
+
+        var expectedId = MakeGuid(5);
+
         for (byte i = 1; i < 4; ++i)
         {
             await context.Commentaries.AddAsync(
                 new CommentaryDbModelBuilder()
-                    .WithId(Guid.NewGuid())
-                    .WithText($"Hello{i}")
-                    .WithAuthorId(Fixture.DefaultUserId)
-                    .WithAudiotrackId(AudiotrackId)
+                    .WithId(MakeGuid(i))
+                    .WithText($"Text{i}")
+                    .WithAuthorId(DefaultUserId)
+                    .WithAudiotrackId(DefaultAudiotrackId)
                     .Build()
             );
         }
@@ -291,12 +319,12 @@ public class TestCommentaryRepository : IDisposable
     }
 
     [Fact]
-    public async void TestGetCommentaryById_EmptyOk()
+    public async void GetCommentaryById_NoCommentaries_ReturnsEmpty()
     {
         // Arrange
 
         // Act
-        var actual = await _repository.GetCommentaryById(Guid.NewGuid());
+        var actual = await _repository.GetCommentaryById(new Guid());
 
         // Assert
         Assert.Null(actual);

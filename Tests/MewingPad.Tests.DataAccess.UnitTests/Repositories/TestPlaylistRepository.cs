@@ -5,29 +5,30 @@ using MewingPad.Tests.DataAccess.UnitTests.Builders;
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
 [Collection("Test Database")]
-public class TestPlaylistRepository : IDisposable
+public class TestPlaylistRepository : BaseRepositoryTestClass
 {
-    public DatabaseFixture Fixture { get; }
     private readonly PlaylistRepository _repository;
 
     public TestPlaylistRepository(DatabaseFixture fixture)
+        : base(fixture)
     {
-        Fixture = fixture;
         _repository = new(Fixture.CreateContext());
     }
 
-    public void Dispose() => Fixture.Cleanup();
-
     [Fact]
-    public async void TestAddPlaylist_Ok()
+    public async void AddPlaylist_AddToExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(2);
+
         var playlist = new PlaylistCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(expectedId)
             .WithTitle("Hello")
-            .WithUserId(Fixture.DefaultUserId)
+            .WithUserId(DefaultUserId)
             .Build();
 
         // Act
@@ -39,15 +40,19 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestAddPlaylist_SamePlaylistError()
+    public async void AddPlaylist_AddPlaylistWithSameId_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(2);
+
         var playlist = new PlaylistCoreModelBuilder()
-            .WithId(Fixture.DefaultFavouriteId)
+            .WithId(DefaultPlaylistId)
             .WithTitle("Hello")
-            .WithUserId(Fixture.DefaultUserId)
+            .WithUserId(DefaultUserId)
             .Build();
 
         // Act
@@ -58,17 +63,19 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestDeletePlaylist_Ok()
+    public async void DeletePlaylist_DeleteExisting_Ok()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid userId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 1]);
-        Guid playlistId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 1]);
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(2);
+
         var playlist = new PlaylistCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(expectedId)
             .WithTitle("Hello")
-            .WithUserId(Fixture.DefaultUserId)
+            .WithUserId(DefaultUserId)
             .Build();
         await context.Playlists.AddAsync(
             new PlaylistDbModelBuilder()
@@ -77,17 +84,17 @@ public class TestPlaylistRepository : IDisposable
                 .WithUserId(playlist.UserId)
                 .Build()
         );
-        context.SaveChanges();
+        await context.SaveChangesAsync();
 
         // Act
-        await _repository.DeletePlaylist(playlist.Id);
+        await _repository.DeletePlaylist(expectedId);
 
         // Assert
         Assert.Single((from a in context.Playlists select a).ToList());
     }
 
     [Fact]
-    public async void TestDeletePlaylist_NonexistentError()
+    public async void DeletePlaylist_DeleteNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
@@ -101,13 +108,18 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestUpdatePlaylist_Ok()
+    public async void UpdatePlaylist_UpdateExisting_Ok()
     {
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(2);
+        const string expectedTitle = "New";
+
         var playlist = new PlaylistCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(expectedId)
             .WithTitle("Hello")
-            .WithUserId(Fixture.DefaultUserId)
+            .WithUserId(DefaultUserId)
             .Build();
         using (var context = Fixture.CreateContext())
         {
@@ -118,10 +130,9 @@ public class TestPlaylistRepository : IDisposable
                     .WithUserId(playlist.UserId)
                     .Build()
             );
-            context.SaveChanges();
+            await context.SaveChangesAsync();
         }
-
-        playlist.Title = "New";
+        playlist.Title = expectedTitle;
 
         // Act
         await _repository.UpdatePlaylist(playlist);
@@ -129,21 +140,34 @@ public class TestPlaylistRepository : IDisposable
         // Assert
         using (var context = Fixture.CreateContext())
         {
-            var actual = (from a in context.Playlists select a).ToList();
-            Assert.Equal(2, actual.Count);
+            Assert.Equal(
+                2,
+                (from p in context.Playlists select p).ToList().Count
+            );
+            Assert.Single(
+                (
+                    from p in context.Playlists
+                    where p.Title == expectedTitle
+                    select p
+                ).ToList()
+            );
         }
     }
 
     [Fact]
-    public async void TestUpdatePlaylist_NonexistentError()
+    public async void UpdatePlaylist_UpdateNonexistent_Error()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        var expectedId = MakeGuid(2);
+
         var playlist = new PlaylistCoreModelBuilder()
-            .WithId(Guid.NewGuid())
+            .WithId(expectedId)
             .WithTitle("Hello")
-            .WithUserId(Guid.NewGuid())
+            .WithUserId(expectedId)
             .Build();
 
         // Act
@@ -154,9 +178,10 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestGetAllPlaylists_SingleOk()
+    public async void GetAllPlaylists_OneExistingPlaylist_ReturnsPlaylist()
     {
         // Arrange
+        await AddDefaultUserWithPlaylist();
 
         // Act
         var actual = await _repository.GetAllPlaylists();
@@ -166,47 +191,49 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestGetAllPlaylists_SomeOk()
+    public async void GetAllPlaylists_PlaylistsExist_ReturnsPlaylists()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        for (int i = 0; i < 3; ++i)
-        {
-            await context.Playlists.AddAsync(
-                new PlaylistDbModelBuilder()
-                    .WithId(Guid.NewGuid())
-                    .WithTitle($"Hello{i}")
-                    .WithUserId(Fixture.DefaultUserId)
-                    .Build()
-            );
-        }
-        context.SaveChanges();
+        await AddDefaultUserWithPlaylist();
+
+        await context.Playlists.AddAsync(
+            new PlaylistDbModelBuilder()
+                .WithId(MakeGuid(2))
+                .WithTitle($"Hello")
+                .WithUserId(DefaultUserId)
+                .Build()
+        );
+        await context.SaveChangesAsync();
 
         // Act
         var actual = await _repository.GetAllPlaylists();
 
         // Assert
-        Assert.Equal(4, actual.Count);
+        Assert.Equal(2, actual.Count);
     }
 
     [Fact]
-    public async void TestGetPlaylistById_Ok()
+    public async void GetPlaylistById_PlaylistWithIdExists_ReturnsPlaylist()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 3]);
-        for (byte i = 2; i < 5; ++i)
-        {
-            await context.Playlists.AddAsync(
-                new PlaylistDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithTitle($"Hello{i}")
-                    .WithUserId(Fixture.DefaultUserId)
-                    .Build()
-            );
-        }
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = MakeGuid(2);
+        var expectedUserId = DefaultUserId;
+        const string expectedTitle = "Hello";
+
+        await context.Playlists.AddAsync(
+            new PlaylistDbModelBuilder()
+                .WithId(expectedId)
+                .WithTitle("Hello")
+                .WithUserId(DefaultUserId)
+                .Build()
+        );
+
         context.SaveChanges();
 
         // Act
@@ -215,28 +242,19 @@ public class TestPlaylistRepository : IDisposable
         // Assert
         Assert.NotNull(actual);
         Assert.Equal(expectedId, actual.Id);
-        Assert.Equal("Hello3", actual.Title);
-        Assert.Equal(Fixture.DefaultUserId, actual.UserId);
+        Assert.Equal(expectedTitle, actual.Title);
+        Assert.Equal(expectedUserId, actual.UserId);
     }
 
     [Fact]
-    public async void TestGetPlaylistById_NoneFoundOk()
+    public async void GetPlaylistById_NoPlaylistsWithId_ReturnsNull()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
-        Guid expectedId = new(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, 6]);
-        for (byte i = 2; i < 5; ++i)
-        {
-            await context.Playlists.AddAsync(
-                new PlaylistDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithTitle($"Hello{i}")
-                    .WithUserId(Fixture.DefaultUserId)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = MakeGuid(2);
 
         // Act
         var actual = await _repository.GetPlaylistById(expectedId);
@@ -246,93 +264,100 @@ public class TestPlaylistRepository : IDisposable
     }
 
     [Fact]
-    public async void TestGetPlaylistById_EmptyOk()
+    public async void GetPlaylistById_NoPlaylistsExist_ReturnsNull()
     {
         // Arrange
 
         // Act
-        var actual = await _repository.GetPlaylistById(Guid.NewGuid());
+        var actual = await _repository.GetPlaylistById(new Guid());
 
         // Assert
         Assert.Null(actual);
     }
 
     [Fact]
-    public async void TestGetUserFavouritesPlaylist_Ok()
+    public async void GetUserFavouritesPlaylist_PlaylistExists_ReturnsPlaylist()
     {
         using var context = Fixture.CreateContext();
-        var data = (from up in context.UsersFavourites select up).ToList();
-        foreach (var item in data)
-        {
-            Console.WriteLine($"{item.UserId}");
-        }
 
         // Arrange
-        for (byte i = 2; i < 5; ++i)
-        {
-            await context.Playlists.AddAsync(
-                new PlaylistDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithTitle($"Hello{i}")
-                    .WithUserId(Fixture.DefaultUserId)
-                    .Build()
-            );
-        }
-        context.SaveChanges();
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = DefaultPlaylistId;
+        var expectedUserId = DefaultUserId;
+        const string expectedTitle = "Favourites";
+
+        await context.Playlists.AddAsync(
+            new PlaylistDbModelBuilder()
+                .WithId(MakeGuid(2))
+                .WithTitle("Hello")
+                .WithUserId(DefaultUserId)
+                .Build()
+        );
+        await context.SaveChangesAsync();
 
         // Act
         var actual = await _repository.GetUserFavouritesPlaylist(
-            Fixture.DefaultUserId
+            expectedUserId
         );
 
         // Assert
         Assert.NotNull(actual);
-        Assert.Equal(Fixture.DefaultFavouriteId, actual.Id);
-        Assert.Equal("Favourites", actual.Title);
-        Assert.Equal(Fixture.DefaultUserId, actual.UserId);
+        Assert.Equal(expectedId, actual.Id);
+        Assert.Equal(expectedTitle, actual.Title);
+        Assert.Equal(expectedUserId, actual.UserId);
     }
 
     [Fact]
-    public async void TestGetUserPlaylists_OnlyFavouritesOk()
+    public async void GetUserPlaylists_NoCustomPlaylists_ReturnsFavourites()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = DefaultPlaylistId;
+        var expectedUserId = DefaultUserId;
+        const string expectedTitle = "Favourites";
 
         // Act
-        var actual = await _repository.GetUserPlaylists(Fixture.DefaultUserId);
+        var actual = await _repository.GetUserPlaylists(DefaultUserId);
 
         // Assert
         Assert.Single(actual);
-        Assert.Equal(Fixture.DefaultFavouriteId, actual[0].Id);
-        Assert.Equal("Favourites", actual[0].Title);
-        Assert.Equal(Fixture.DefaultUserId, actual[0].UserId);
+        Assert.Equal(expectedId, actual[0].Id);
+        Assert.Equal(expectedTitle, actual[0].Title);
+        Assert.Equal(expectedUserId, actual[0].UserId);
     }
 
     [Fact]
-    public async void TestGetUserPlaylists_ManyOk()
+    public async void GetUserPlaylists_CustomPlaylistsExist_ReturnsPlaylists()
     {
         using var context = Fixture.CreateContext();
 
         // Arrange
+        await AddDefaultUserWithPlaylist();
+
+        Guid expectedId = DefaultPlaylistId;
+        var expectedUserId = DefaultUserId;
+
         await context.Playlists.AddAsync(
             new PlaylistDbModelBuilder()
-                .WithId(Guid.NewGuid())
+                .WithId(MakeGuid(2))
                 .WithTitle("Hello")
-                .WithUserId(Fixture.DefaultUserId)
+                .WithUserId(DefaultUserId)
                 .Build()
         );
-        context.SaveChanges();
+        await context.SaveChangesAsync();
 
         // Act
-        var actual = await _repository.GetUserPlaylists(Fixture.DefaultUserId);
+        var actual = await _repository.GetUserPlaylists(expectedUserId);
 
         // Assert
         Assert.Equal(2, actual.Count);
-
         Assert.All(
             actual,
-            (playlist) => Assert.Equal(Fixture.DefaultUserId, playlist.UserId)
+            playlist => Assert.Equal(expectedUserId, playlist.UserId)
         );
     }
 }
