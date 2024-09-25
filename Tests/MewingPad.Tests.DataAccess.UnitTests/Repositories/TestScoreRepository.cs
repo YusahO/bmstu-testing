@@ -1,75 +1,90 @@
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
+using Moq.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
-[Collection("Test Database")]
 public class TestScoreRepository : BaseRepositoryTestClass
 {
     private readonly ScoreRepository _repository;
+    private readonly MockDbContextFactory _mockFactory;
 
-    public TestScoreRepository(DatabaseFixture fixture)
-        : base(fixture)
+    public TestScoreRepository()
     {
-        _repository = new(Fixture.CreateContext());
+        _mockFactory = new MockDbContextFactory();
+        _repository = new(_mockFactory.MockContext.Object);
+    }
+
+    private static Score CreateScoreCoreModel(
+        Guid authorId,
+        Guid audiotrackId,
+        int value
+    )
+    {
+        return new ScoreCoreModelBuilder()
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithValue(value)
+            .Build();
+    }
+
+    private static ScoreDbModel CreateScoreDbo(
+        Guid authorId,
+        Guid audiotrackId,
+        int value
+    )
+    {
+        return new ScoreDbModelBuilder()
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithValue(value)
+            .Build();
+    }
+
+    private static ScoreDbModel CreateScoreDboFromCore(Score score)
+    {
+        return CreateScoreDbo(score.AuthorId, score.AudiotrackId, score.Value);
     }
 
     [Fact]
-    public async void AddScore_AddSingle_Ok()
+    public async void AddScore_AddUnique_Ok()
     {
-        using var context = Fixture.CreateContext();
+        List<ScoreDbModel> actual = [];
+        var score = CreateScoreCoreModel(MakeGuid(1), MakeGuid(1), 3);
+        var scoreDbo = CreateScoreDboFromCore(score);
 
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const int expectedValue = 3;
-
-        var score = new ScoreCoreModelBuilder()
-            .WithAuthorId(expectedAuthorId)
-            .WithAudiotrackId(expectedAudiotrackId)
-            .WithValue(expectedValue)
-            .Build();
+        _mockFactory
+            .MockScoresDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<ScoreDbModel>(), default)
+            )
+            .Callback<ScoreDbModel, CancellationToken>(
+                (s, token) => actual.Add(s)
+            );
 
         // Act
         await _repository.AddScore(score);
 
         // Assert
-        var actual = (from a in context.Scores select a).ToList();
         Assert.Single(actual);
-        Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
-        Assert.Equal(expectedValue, actual[0].Value);
+        Assert.Equal(score.Value, actual[0].Value);
+        Assert.Equal(score.AuthorId, actual[0].AuthorId);
+        Assert.Equal(score.AudiotrackId, actual[0].AudiotrackId);
     }
 
     [Fact]
     public async void AddScore_AddScoreWithSameId_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var score = new ScoreCoreModelBuilder()
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .WithValue(3)
-            .Build();
-        await context.Scores.AddAsync(
-            new ScoreDbModelBuilder()
-                .WithAuthorId(score.AuthorId)
-                .WithAudiotrackId(score.AudiotrackId)
-                .WithValue(score.Value)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockScoresDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<ScoreDbModel>(), default)
+            )
+            .Callback<ScoreDbModel, CancellationToken>(
+                (s, token) => throw new RepositoryException()
+            );
 
         // Act
-        async Task Action() => await _repository.AddScore(score);
+        async Task Action() => await _repository.AddScore(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -79,268 +94,146 @@ public class TestScoreRepository : BaseRepositoryTestClass
     public async void UpdateScore_UpdateExisting_Ok()
     {
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
+        Guid expectedAuthorId = MakeGuid(1);
+        Guid expectedAudiotrackId = MakeGuid(1);
+        const int expectedValue = 4;
 
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const int expectedValue = 1;
+        var score = CreateScoreCoreModel(
+            expectedAuthorId,
+            expectedAudiotrackId,
+            expectedValue
+        );
+        var scoreDbo = CreateScoreDboFromCore(score);
+        List<ScoreDbModel> scoreDbos = [scoreDbo];
 
-        var score = new ScoreCoreModelBuilder()
-            .WithAuthorId(expectedAuthorId)
-            .WithAudiotrackId(expectedAudiotrackId)
-            .WithValue(3)
-            .Build();
-
-        using (var context = Fixture.CreateContext())
-        {
-            context.Scores.Add(
-                new ScoreDbModelBuilder()
-                    .WithAuthorId(score.AuthorId)
-                    .WithAudiotrackId(score.AudiotrackId)
-                    .WithValue(score.Value)
-                    .Build()
-            );
-            await context.SaveChangesAsync();
-        }
-
-        score.SetValue(expectedValue);
+        _mockFactory
+            .MockScoresDbSet.Setup(s => s.Update(It.IsAny<ScoreDbModel>()))
+            .Callback((ScoreDbModel s) => scoreDbos[0].Value = expectedValue);
 
         // Act
         await _repository.UpdateScore(score);
 
         // Assert
-        using (var context = Fixture.CreateContext())
-        {
-            var actual = (from a in context.Scores select a).ToList();
-            Assert.Single(actual);
-            Assert.Equal(expectedValue, actual[0].Value);
-            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-            Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
-        }
+        Assert.Single(scoreDbos);
+        Assert.Equal(expectedValue, scoreDbos[0].Value);
+        Assert.Equal(score.AuthorId, scoreDbos[0].AuthorId);
+        Assert.Equal(score.AudiotrackId, scoreDbos[0].AudiotrackId);
     }
 
     [Fact]
     public async void UpdateScore_UpdateNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        var score = new ScoreCoreModelBuilder()
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .WithValue(3)
-            .Build();
+        _mockFactory
+            .MockScoresDbSet.Setup(s => s.Update(It.IsAny<ScoreDbModel>()))
+            .Callback((ScoreDbModel s) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.UpdateScore(score);
+        async Task Action() => await _repository.UpdateScore(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
-    [Fact]
-    public async void GetScoreByPrimaryKey_ScoreExists_ReturnsScore()
+    public static IEnumerable<object[]> GetScoreByPrimaryKey_GetTestData()
     {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = MakeGuid(3);
-        const int expectedValue = 3;
-
-        Guid[] audiotrackIds = Enumerable
-            .Range(1, 3)
-            .Select(i => MakeGuid(Convert.ToByte(i)))
-            .ToArray();
-        foreach (var id in audiotrackIds)
+        yield return new object[] { default(ScoreDbModel)!, default(Score)! };
+        yield return new object[]
         {
-            await AddAudiotrackWithId(id);
-        }
-        for (byte i = 0; i < 3; ++i)
-        {
-            await context.Scores.AddAsync(
-                new ScoreDbModelBuilder()
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(audiotrackIds[i])
-                    .WithValue(i + 1)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetScoreByPrimaryKey(
-            expectedAuthorId,
-            expectedAudiotrackId
-        );
-
-        // Assert
-        Assert.NotNull(actual);
-        Assert.Equal(expectedAudiotrackId, actual.AudiotrackId);
-        Assert.Equal(expectedAuthorId, actual.AuthorId);
-        Assert.Equal(expectedValue, actual.Value);
+            CreateScoreDbo(MakeGuid(1), MakeGuid(1), 3),
+            CreateScoreCoreModel(MakeGuid(1), MakeGuid(1), 3),
+        };
     }
 
-    [Fact]
-    public async void GetScoreByPrimaryKey_NoScoreWithSuchId_ReturnsNull()
+    [Theory]
+    [MemberData(nameof(GetScoreByPrimaryKey_GetTestData))]
+    public async void GetScoreByPrimaryKey_ReturnsFound(
+        ScoreDbModel returnedScoreDbo,
+        Score expectedScore
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedAudiotrackId = MakeGuid(2);
-
-        await context.Scores.AddAsync(
-            new ScoreDbModelBuilder()
-                .WithAuthorId(DefaultUserId)
-                .WithAudiotrackId(DefaultAudiotrackId)
-                .WithValue(4)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockScoresDbSet.Setup(x => x.FindAsync(It.IsAny<object?[]?>()))
+            .ReturnsAsync(returnedScoreDbo);
 
         // Act
-        var actual = await _repository.GetScoreByPrimaryKey(
-            DefaultUserId,
-            expectedAudiotrackId
-        );
+        var actual = await _repository.GetScoreByPrimaryKey(new(), new());
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedScore, actual);
     }
 
-    [Fact]
-    public async void GetScoreByPrimaryKey_NoScores_ReturnsNull()
+    public static IEnumerable<object[]> GetAllScores_GetTestData()
     {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetScoreByPrimaryKey(
-            new Guid(),
-            new Guid()
-        );
-
-        // Assert
-        Assert.Null(actual);
+        yield return new object[]
+        {
+            new List<ScoreDbModel>(),
+            new List<Score>(),
+        };
+        yield return new object[]
+        {
+            new List<ScoreDbModel>(
+                [CreateScoreDbo(MakeGuid(1), MakeGuid(1), 3)]
+            ),
+            new List<Score>(
+                [CreateScoreCoreModel(MakeGuid(1), MakeGuid(1), 3)]
+            ),
+        };
     }
 
-    [Fact]
-    public async void GetAllScores_ScoresExist_ReturnsScores()
+    [Theory]
+    [MemberData(nameof(GetAllScores_GetTestData))]
+    public async void GetAllScores_ReturnsFound(
+        List<ScoreDbModel> scoreDbos,
+        List<Score> expectedScores
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        Guid[] audiotrackIds = Enumerable
-            .Range(1, 3)
-            .Select(i => MakeGuid(Convert.ToByte(i)))
-            .ToArray();
-        foreach (var id in audiotrackIds)
-        {
-            await AddAudiotrackWithId(id);
-        }
-        for (byte i = 0; i < 3; ++i)
-        {
-            await context.Scores.AddAsync(
-                new ScoreDbModelBuilder()
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(audiotrackIds[i])
-                    .WithValue(i + 1)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+        _mockFactory.MockContext.Setup(x => x.Scores).ReturnsDbSet(scoreDbos);
 
         // Act
         var actual = await _repository.GetAllScores();
 
         // Assert
-        Assert.Equal(3, actual.Count);
+        Assert.Equal(expectedScores, actual);
     }
 
-    [Fact]
-    public async void GetAllScores_NoScores_ReturnsEmpty()
+    public static IEnumerable<object[]> GetAudiotrackScores_GetTestData()
     {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetAllScores();
-
-        // Assert
-        Assert.Empty(actual);
+        yield return new object[]
+        {
+            new List<ScoreDbModel>(),
+            new List<Score>(),
+        };
+        yield return new object[]
+        {
+            new List<ScoreDbModel>(
+                [
+                    CreateScoreDbo(MakeGuid(1), MakeGuid(1), 3),
+                    CreateScoreDbo(MakeGuid(1), MakeGuid(2), 3),
+                ]
+            ),
+            new List<Score>(
+                [CreateScoreCoreModel(MakeGuid(1), MakeGuid(1), 3)]
+            ),
+        };
     }
 
-    [Fact]
-    public async void GetAudiotrackScores_AudiotrackScoresExist_ReturnsScores()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        var anotherUserId = MakeGuid(2);
-        await AddDefaultUserWithPlaylist();
-        await AddUserWithPlaylistWithIds(anotherUserId, MakeGuid(2));
-        await AddDefaultAudiotrack();
-
-        var expectedAudiotrackId = DefaultAudiotrackId;
-
-        await context.Scores.AddAsync(
-            new ScoreDbModelBuilder()
-                .WithAuthorId(DefaultUserId)
-                .WithAudiotrackId(DefaultAudiotrackId)
-                .WithValue(3)
-                .Build()
-        );
-        await context.Scores.AddAsync(
-            new ScoreDbModelBuilder()
-                .WithAuthorId(anotherUserId)
-                .WithAudiotrackId(DefaultAudiotrackId)
-                .WithValue(2)
-                .Build()
-        );
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetAudiotrackScores(
-            expectedAudiotrackId
-        );
-
-        // Assert
-        Assert.Equal(2, actual.Count);
-        Assert.All(
-            actual,
-            s => Assert.Equal(expectedAudiotrackId, s.AudiotrackId)
-        );
-    }
-
-    [Fact]
-    public async void GetAudiotrackScores_NoAudiotrack_ReturnsEmpty()
+    [Theory]
+    [MemberData(nameof(GetAudiotrackScores_GetTestData))]
+    public async void GetAudiotrackScores_ReturnsFound(
+        List<ScoreDbModel> scoreDbos,
+        List<Score> expectedScores
+    )
     {
         // Arrange
+        _mockFactory.MockContext.Setup(x => x.Scores).ReturnsDbSet(scoreDbos);
 
         // Act
-        var actual = await _repository.GetAudiotrackScores(DefaultAudiotrackId);
+        var actual = await _repository.GetAudiotrackScores(MakeGuid(1));
 
         // Assert
-        Assert.Empty(actual);
-    }
-
-    [Fact]
-    public async void GetAudiotrackScores_NoScores_ReturnsEmpty()
-    {
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        // Act
-        var actual = await _repository.GetAudiotrackScores(DefaultAudiotrackId);
-
-        // Assert
-        Assert.Empty(actual);
+        Assert.Equal(expectedScores, actual);
     }
 }

@@ -1,5 +1,4 @@
 using MewingPad.Common.Entities;
-using MewingPad.Common.Enums;
 using MewingPad.Common.Exceptions;
 using MewingPad.Common.IRepositories;
 using MewingPad.Utils.PasswordHasher;
@@ -8,48 +7,24 @@ using Serilog;
 
 namespace MewingPad.Services.OAuthService;
 
-public class OAuthService(IConfiguration config,
-                          IUserRepository userRepository,
-                          IPlaylistRepository playlistRepository,
-                          IUserFavouriteRepository userFavouriteRepository) : IOAuthService
+public class OAuthService(
+    IConfiguration config,
+    IUserRepository userRepository,
+    IPlaylistRepository playlistRepository,
+    IUserFavouriteRepository userFavouriteRepository
+) : IOAuthService
 {
-    private readonly IUserRepository _userRepository = userRepository
-                                                       ?? throw new ArgumentNullException();
-    private readonly IPlaylistRepository _playlistRepository = playlistRepository
-                                                               ?? throw new ArgumentNullException();
-    private readonly IUserFavouriteRepository _userFavouriteRepository = userFavouriteRepository
-                                                                         ?? throw new ArgumentNullException();
+    private readonly IUserRepository _userRepository =
+        userRepository ?? throw new ArgumentNullException();
+    private readonly IPlaylistRepository _playlistRepository =
+        playlistRepository ?? throw new ArgumentNullException();
+    private readonly IUserFavouriteRepository _userFavouriteRepository =
+        userFavouriteRepository ?? throw new ArgumentNullException();
     private readonly ILogger _logger = Log.ForContext<OAuthService>();
     private readonly IConfiguration _config = config;
-    private readonly string _favouritesName = config["ApiSettings:FavouritesDefaultName"]!;
-
-    public async Task RegisterAdmin(string name, string password)
-    {
-        _logger.Verbose("Entering RegisterAdmin");
-
-        if (await _userRepository.GetUserByEmail("admin@mp.ru") is not null)
-        {
-            Console.WriteLine(name);
-            return;
-        }
-
-        var user = new User(Guid.NewGuid(),
-                            name,
-                            "admin@mp.ru",
-                            PasswordHasher.HashPassword(password),
-                            UserRole.Admin);
-
-        await _userRepository.AddUser(user);
-        _logger.Information($"Administrator (Id = {user.Id}) added");
-
-        var favouritesId = Guid.NewGuid();
-        await _playlistRepository.AddPlaylist(new(favouritesId, _favouritesName, user.Id));
-        _logger.Information($"Administrator favourites playlist (Id = {favouritesId}) added");
-
-        await _userFavouriteRepository.AddUserFavouritePlaylist(user.Id, favouritesId);
-
-        _logger.Verbose("Exiting RegisterAdmin");
-    }
+    private readonly string _favouritesName = config[
+        "ApiSettings:FavouritesDefaultName"
+    ]!;
 
     public async Task<User> RegisterUser(User user)
     {
@@ -58,8 +33,12 @@ public class OAuthService(IConfiguration config,
         var foundUser = await _userRepository.GetUserByEmail(user.Email);
         if (foundUser is not null)
         {
-            _logger.Error($"User with email \"{user.Email}\" already exists, cannot register");
-            throw new UserRegisteredException($"User with email \"{user.Email}\" already registered");
+            _logger.Error(
+                $"User with email \"{user.Email}\" already exists, cannot register"
+            );
+            throw new UserRegisteredException(
+                $"User with email \"{user.Email}\" already registered"
+            );
         }
         user.PasswordHashed = PasswordHasher.HashPassword(user.PasswordHashed);
 
@@ -67,10 +46,17 @@ public class OAuthService(IConfiguration config,
         _logger.Information($"User (Id = {user.Id}) added");
 
         var favouritesId = Guid.NewGuid();
-        await _playlistRepository.AddPlaylist(new(favouritesId, _favouritesName, user.Id));
-        _logger.Information($"User favourites playlist (Id = {favouritesId}) added");
+        await _playlistRepository.AddPlaylist(
+            new(favouritesId, _favouritesName, user.Id)
+        );
+        _logger.Information(
+            $"User favourites playlist (Id = {favouritesId}) added"
+        );
 
-        await _userFavouriteRepository.AddUserFavouritePlaylist(user.Id, favouritesId);
+        await _userFavouriteRepository.AddUserFavouritePlaylist(
+            user.Id,
+            favouritesId
+        );
 
         _logger.Verbose("Exiting RegisterUser");
         return user;
@@ -83,13 +69,17 @@ public class OAuthService(IConfiguration config,
         if (user is null)
         {
             _logger.Error($"User with email \"{email}\" not found");
-            throw new UserNotFoundException($"User with email \"{email}\" not found");
+            throw new UserNotFoundException(
+                $"User with email \"{email}\" not found"
+            );
         }
 
         if (!PasswordHasher.VerifyPassword(password, user.PasswordHashed))
         {
             _logger.Error($"Incorrect password for user \"{email}\"");
-            throw new UserCredentialsException($"Incorrect password for user with login \"{email}\"");
+            throw new UserCredentialsException(
+                $"Incorrect password for user with login \"{email}\""
+            );
         }
 
         _logger.Verbose("Exiting SignInUser method");

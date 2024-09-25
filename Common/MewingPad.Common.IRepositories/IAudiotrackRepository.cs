@@ -10,5 +10,4 @@ public interface IAudiotrackRepository
     Task<Audiotrack?> GetAudiotrackById(Guid id);
     Task<List<Audiotrack>> GetAllAudiotracks();
     Task<List<Audiotrack>> GetAudiotracksByTitle(string title);
-    Task<float> GetAudiotrackMeanScore(Guid audiotrackId);
 }

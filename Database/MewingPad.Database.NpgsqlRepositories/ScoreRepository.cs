@@ -126,10 +126,7 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
                 [score.AuthorId, score.AudiotrackId]
             );
 
-            scoreDbModel!.AuthorId = score.AuthorId;
-            scoreDbModel!.AudiotrackId = score.AudiotrackId;
-            scoreDbModel!.Value = score.Value;
-
+            _context.Scores.Update(ScoreConverter.CoreToDbModel(score));
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

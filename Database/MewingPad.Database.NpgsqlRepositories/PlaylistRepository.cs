@@ -8,7 +8,8 @@ using Serilog;
 
 namespace MewingPad.Database.NpgsqlRepositories;
 
-public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepository
+public class PlaylistRepository(MewingPadDbContext context)
+    : IPlaylistRepository
 {
     private readonly MewingPadDbContext _context = context;
 
@@ -20,7 +21,9 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
 
         try
         {
-            await _context.Playlists.AddAsync(PlaylistConverter.CoreToDbModel(playlist));
+            await _context.Playlists.AddAsync(
+                PlaylistConverter.CoreToDbModel(playlist)
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -37,7 +40,9 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
 
         try
         {
-            var playlistDbModel = await _context.Playlists.FindAsync(playlistId);
+            var playlistDbModel = await _context.Playlists.FindAsync(
+                playlistId
+            );
             _context.Playlists.Remove(playlistDbModel!);
             await _context.SaveChangesAsync();
         }
@@ -56,9 +61,9 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
         List<Playlist> playlists;
         try
         {
-            playlists = await _context.Playlists
-                    .Select(p => PlaylistConverter.DbToCoreModel(p)!)
-                    .ToListAsync();
+            playlists = await _context
+                .Playlists.Select(p => PlaylistConverter.DbToCoreModel(p)!)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -76,7 +81,9 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
         Playlist? playlist;
         try
         {
-            var playlistDbModel = await _context.Playlists.FindAsync(playlistId);
+            var playlistDbModel = await _context.Playlists.FindAsync(
+                playlistId
+            );
             playlist = PlaylistConverter.DbToCoreModel(playlistDbModel);
         }
         catch (Exception ex)
@@ -95,10 +102,12 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
         Playlist? playlist;
         try
         {
-            playlist = await (from f in _context.UsersFavourites
-                              join p in _context.Playlists on f.FavouriteId equals p.Id
-                              where f.UserId == userId
-                              select PlaylistConverter.DbToCoreModel(p)).FirstAsync();
+            playlist = await (
+                from f in _context.UsersFavourites
+                join p in _context.Playlists on f.FavouriteId equals p.Id
+                where f.UserId == userId
+                select PlaylistConverter.DbToCoreModel(p)
+            ).FirstOrDefaultAsync();
         }
         catch (Exception ex)
         {
@@ -116,10 +125,10 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
         List<Playlist> playlists;
         try
         {
-            playlists = await _context.Playlists
-                   .Where(p => p.UserId == userId)
-                   .Select(p => PlaylistConverter.DbToCoreModel(p))
-                   .ToListAsync();
+            playlists = await _context
+                .Playlists.Where(p => p.UserId == userId)
+                .Select(p => PlaylistConverter.DbToCoreModel(p))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -136,12 +145,9 @@ public class PlaylistRepository(MewingPadDbContext context) : IPlaylistRepositor
 
         try
         {
-            var playlistDbModel = await _context.Playlists.FindAsync(playlist.Id);
-
-            playlistDbModel!.Id = playlist.Id;
-            playlistDbModel!.Title = playlist.Title;
-            playlistDbModel!.UserId = playlist.UserId;
-
+            _context.Playlists.Update(
+                PlaylistConverter.CoreToDbModel(playlist)
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

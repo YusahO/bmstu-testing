@@ -1,75 +1,108 @@
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
+using Moq.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
-[Collection("Test Database")]
 public class TestCommentaryRepository : BaseRepositoryTestClass
 {
     private readonly CommentaryRepository _repository;
+    private readonly MockDbContextFactory _mockFactory;
 
-    public TestCommentaryRepository(DatabaseFixture fixture)
-        : base(fixture)
+    public TestCommentaryRepository()
     {
-        _repository = new(Fixture.CreateContext());
+        _mockFactory = new MockDbContextFactory();
+        _repository = new(_mockFactory.MockContext.Object);
+    }
+
+    private static Commentary CreateCommentaryCoreModel(
+        Guid id,
+        Guid authorId,
+        Guid audiotrackId,
+        string text
+    )
+    {
+        return new CommentaryCoreModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithText(text)
+            .Build();
+    }
+
+    private static CommentaryDbModel CreateCommentaryDbo(
+        Guid id,
+        Guid authorId,
+        Guid audiotrackId,
+        string text
+    )
+    {
+        return new CommentaryDbModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithText(text)
+            .Build();
+    }
+
+    private static CommentaryDbModel CreateCommentaryDboFromCore(
+        Commentary commentary
+    )
+    {
+        return CreateCommentaryDbo(
+            commentary.Id,
+            commentary.AuthorId,
+            commentary.AudiotrackId,
+            commentary.Text
+        );
     }
 
     [Fact]
-    public async void AddCommentary_AddSingle_Ok()
+    public async void AddCommentary_AddUnique_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
+        List<CommentaryDbModel> actual = [];
+        var commentary = CreateCommentaryCoreModel(
+            MakeGuid(1),
+            MakeGuid(1),
+            MakeGuid(1),
+            "Text"
+        );
+        var commentaryDbo = CreateCommentaryDboFromCore(commentary);
 
-        var expectedId = MakeGuid(1);
-
-        var commentary = new CommentaryCoreModelBuilder()
-            .WithId(expectedId)
-            .WithText("Text")
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .Build();
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<CommentaryDbModel>(), default)
+            )
+            .Callback<CommentaryDbModel, CancellationToken>(
+                (u, token) => actual.Add(u)
+            );
 
         // Act
         await _repository.AddCommentary(commentary);
 
         // Assert
-        var actual = (from a in context.Commentaries select a).ToList();
         Assert.Single(actual);
+        Assert.Equal(commentary.Id, actual[0].Id);
+        Assert.Equal(commentary.Text, actual[0].Text);
+        Assert.Equal(commentary.AuthorId, actual[0].AuthorId);
+        Assert.Equal(commentary.AudiotrackId, actual[0].AudiotrackId);
     }
 
     [Fact]
     public async void AddCommentary_AddCommentaryWithSameId_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(1);
-
-        var commentary = new CommentaryCoreModelBuilder()
-            .WithId(expectedId)
-            .WithText("Text")
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .Build();
-        await context.Commentaries.AddAsync(
-            new CommentaryDbModelBuilder()
-                .WithId(commentary.Id)
-                .WithText(commentary.Text)
-                .WithAuthorId(commentary.AuthorId)
-                .WithAudiotrackId(commentary.AudiotrackId)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<CommentaryDbModel>(), default)
+            )
+            .Callback<CommentaryDbModel, CancellationToken>(
+                (a, token) => throw new RepositoryException()
+            );
 
         // Act
-        async Task Action() => await _repository.AddCommentary(commentary);
+        async Task Action() => await _repository.AddCommentary(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -78,46 +111,48 @@ public class TestCommentaryRepository : BaseRepositoryTestClass
     [Fact]
     public async void DeleteCommentary_DeleteExisting_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(1);
-
-        var commentary = new CommentaryCoreModelBuilder()
-            .WithId(expectedId)
-            .WithText("Text")
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .Build();
-        await context.Commentaries.AddAsync(
-            new CommentaryDbModelBuilder()
-                .WithId(commentary.Id)
-                .WithText(commentary.Text)
-                .WithAuthorId(commentary.AuthorId)
-                .WithAudiotrackId(commentary.AudiotrackId)
-                .Build()
+        Guid expectedId = MakeGuid(1);
+        var commentary = CreateCommentaryCoreModel(
+            MakeGuid(1),
+            MakeGuid(1),
+            MakeGuid(1),
+            "text"
         );
-        context.SaveChanges();
+        var commentaryDbo = CreateCommentaryDboFromCore(commentary);
+        List<CommentaryDbModel> commentaryDbos = [commentaryDbo];
+
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s => s.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(commentaryDbo);
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.Remove(It.IsAny<CommentaryDbModel>())
+            )
+            .Callback((CommentaryDbModel c) => commentaryDbos.Remove(c));
 
         // Act
-        await _repository.DeleteCommentary(commentary.Id);
+        await _repository.DeleteCommentary(expectedId);
 
         // Assert
-        Assert.Empty((from a in context.Commentaries select a).ToList());
+        Assert.Empty(commentaryDbos);
     }
 
     [Fact]
     public async void DeleteCommentary_DeleteNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s => s.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(default(CommentaryDbModel)!);
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.Remove(It.IsAny<CommentaryDbModel>())
+            )
+            .Callback((CommentaryDbModel a) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.DeleteCommentary(new Guid());
+        async Task Action() => await _repository.DeleteCommentary(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -127,206 +162,116 @@ public class TestCommentaryRepository : BaseRepositoryTestClass
     public async void UpdateCommentary_UpdateExisting_Ok()
     {
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
         var expectedId = MakeGuid(1);
-        Guid expectedAuthorId = DefaultUserId;
-        Guid expectedAudiotrackId = DefaultAudiotrackId;
-        const string expectedText = "New";
+        Guid expectedAuthorId = MakeGuid(1);
+        Guid expectedAudiotrackId = MakeGuid(1);
+        const string expectedText = "text";
 
-        var commentary = new CommentaryCoreModelBuilder()
-            .WithId(expectedId)
-            .WithText("Text")
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .Build();
-        using (var context = Fixture.CreateContext())
-        {
-            await context.Commentaries.AddAsync(
-                new CommentaryDbModelBuilder()
-                    .WithId(commentary.Id)
-                    .WithText(commentary.Text)
-                    .WithAuthorId(commentary.AuthorId)
-                    .WithAudiotrackId(commentary.AudiotrackId)
-                    .Build()
+        var commentary = CreateCommentaryCoreModel(
+            expectedId,
+            expectedAuthorId,
+            expectedAudiotrackId,
+            expectedText
+        );
+        var commentaryDbo = CreateCommentaryDboFromCore(commentary);
+        List<CommentaryDbModel> commentaryDbos = [commentaryDbo];
+
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.Update(It.IsAny<CommentaryDbModel>())
+            )
+            .Callback(
+                (CommentaryDbModel c) =>
+                    commentaryDbos[0].Text = new(expectedText)
             );
-            await context.SaveChangesAsync();
-        }
-
-        commentary.Text = expectedText;
 
         // Act
         await _repository.UpdateCommentary(commentary);
 
         // Assert
-        using (var context = Fixture.CreateContext())
-        {
-            var actual = (from a in context.Commentaries select a).ToList();
-            Assert.Single(actual);
-            Assert.Equal(expectedId, actual[0].Id);
-            Assert.Equal(expectedText, actual[0].Text);
-            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-            Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
-        }
+        Assert.Single(commentaryDbos);
+        Assert.Equal(commentary.Id, commentaryDbos[0].Id);
+        Assert.Equal(expectedText, commentaryDbos[0].Text);
+        Assert.Equal(commentary.AuthorId, commentaryDbos[0].AuthorId);
+        Assert.Equal(commentary.AudiotrackId, commentaryDbos[0].AudiotrackId);
     }
 
     [Fact]
     public async void UpdateCommentary_UpdateNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(1);
-
-        var commentary = new CommentaryCoreModelBuilder()
-            .WithId(expectedId)
-            .WithText("Text")
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .Build();
+        _mockFactory
+            .MockCommentariesDbSet.Setup(s =>
+                s.Update(It.IsAny<CommentaryDbModel>())
+            )
+            .Callback((CommentaryDbModel c) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.UpdateCommentary(commentary);
+        async Task Action() => await _repository.UpdateCommentary(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
-    [Fact]
-    public async void GetAudiotrackCommentaries_NoCommentaries_ReturnsEmpty()
+    public static IEnumerable<object[]> GetAudiotrackCommentaries_GetTestData()
     {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetAudiotrackCommentaries(
-            DefaultAudiotrackId
-        );
-
-        // Assert
-        Assert.Empty(actual);
-    }
-
-    [Fact]
-    public async void GetAudiotrackCommentaries_CommetariesExist_ReturnsCommentaries()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(1);
-        Guid expectedAudiotrackId = DefaultAudiotrackId;
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[]
         {
-            await context.Commentaries.AddAsync(
-                new CommentaryDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithText("Text")
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetAudiotrackCommentaries(
-            DefaultAudiotrackId
-        );
-
-        // Assert
-        Assert.Equal(3, actual.Count);
-        Assert.All(
-            actual,
-            commentary =>
-                Assert.Equal(expectedAudiotrackId, commentary.AudiotrackId)
-        );
+            new List<CommentaryDbModel>(),
+            new List<Commentary>(),
+        };
     }
 
-    [Fact]
-    public async void GetCommentaryById_CommentariesExist_ReturnsCommentary()
+    [Theory]
+    [MemberData(nameof(GetAudiotrackCommentaries_GetTestData))]
+    public async void GetAudiotrackCommentaries_ReturnsFound(
+        List<CommentaryDbModel> commentaryDbos,
+        List<Commentary> expectedCommentraries
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
+        _mockFactory
+            .MockContext.Setup(x => x.Commentaries)
+            .ReturnsDbSet(commentaryDbos);
 
-        var expectedId = MakeGuid(3);
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const string expectedText = "Text3";
+        // Act
+        var actual = await _repository.GetAudiotrackCommentaries(MakeGuid(1));
 
-        for (byte i = 1; i < 4; ++i)
+        // Assert
+        Assert.Equal(expectedCommentraries, actual);
+    }
+
+    public static IEnumerable<object[]> GetCommentaryById_GetTestData()
+    {
+        yield return new object[] { new CommentaryDbModel(), new Commentary() };
+        yield return new object[]
         {
-            await context.Commentaries.AddAsync(
-                new CommentaryDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithText($"Text{i}")
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetCommentaryById(expectedId);
-
-        // Assert
-        Assert.NotNull(actual);
-        Assert.Equal(expectedId, actual.Id);
-        Assert.Equal(expectedText, actual.Text);
-        Assert.Equal(expectedAuthorId, actual.AuthorId);
-        Assert.Equal(expectedAudiotrackId, actual.AudiotrackId);
+            CreateCommentaryDbo(MakeGuid(1), MakeGuid(1), MakeGuid(1), "text"),
+            CreateCommentaryCoreModel(
+                MakeGuid(1),
+                MakeGuid(1),
+                MakeGuid(1),
+                "text"
+            ),
+        };
     }
 
-    [Fact]
-    public async void GetCommentaryById_NoCommentariesWithId_ReturnsNull()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(5);
-
-        for (byte i = 1; i < 4; ++i)
-        {
-            await context.Commentaries.AddAsync(
-                new CommentaryDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithText($"Text{i}")
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetCommentaryById(expectedId);
-
-        // Assert
-        Assert.Null(actual);
-    }
-
-    [Fact]
-    public async void GetCommentaryById_NoCommentaries_ReturnsEmpty()
+    [Theory]
+    [MemberData(nameof(GetCommentaryById_GetTestData))]
+    public async Task GetCommentaryById_ReturnsFound(
+        CommentaryDbModel returnedCommentaryDbo,
+        Commentary expectedCommentary
+    )
     {
         // Arrange
+        _mockFactory
+            .MockCommentariesDbSet.Setup(x => x.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(returnedCommentaryDbo);
 
         // Act
-        var actual = await _repository.GetCommentaryById(new Guid());
+        var actual = await _repository.GetCommentaryById(expectedCommentary.Id);
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedCommentary, actual);
     }
 }

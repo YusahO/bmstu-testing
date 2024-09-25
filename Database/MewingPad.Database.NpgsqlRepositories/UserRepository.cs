@@ -1,11 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
-using MewingPad.Common.Entities;
+﻿using MewingPad.Common.Entities;
+using MewingPad.Common.Enums;
+using MewingPad.Common.Exceptions;
 using MewingPad.Common.IRepositories;
 using MewingPad.Database.Context;
 using MewingPad.Database.Models.Converters;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
-using MewingPad.Common.Exceptions;
-using MewingPad.Common.Enums;
 
 namespace MewingPad.Database.NpgsqlRepositories;
 
@@ -39,10 +39,10 @@ public class UserRepository(MewingPadDbContext context) : IUserRepository
         List<User> admins;
         try
         {
-            admins = await _context.Users
-                    .Where(u => u.Role == UserRole.Admin)
-                    .Select(u => UserConverter.DbToCoreModel(u))
-                    .ToListAsync();
+            admins = await _context
+                .Users.Where(u => u.Role == UserRole.Admin)
+                .Select(u => UserConverter.DbToCoreModel(u))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -60,9 +60,9 @@ public class UserRepository(MewingPadDbContext context) : IUserRepository
         List<User> users;
         try
         {
-            users = await _context.Users
-                    .Select(u => UserConverter.DbToCoreModel(u))
-                    .ToListAsync();
+            users = await _context
+                .Users.Select(u => UserConverter.DbToCoreModel(u))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -80,8 +80,11 @@ public class UserRepository(MewingPadDbContext context) : IUserRepository
         User? user;
         try
         {
-            var userDbModel = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            user = UserConverter.DbToCoreModel(userDbModel);
+            user = await (
+                from u in _context.Users
+                where u.Email == email
+                select UserConverter.DbToCoreModel(u)
+            ).FirstOrDefaultAsync();
         }
         catch (Exception ex)
         {
@@ -117,14 +120,7 @@ public class UserRepository(MewingPadDbContext context) : IUserRepository
 
         try
         {
-            var userDbModel = await _context.Users.FindAsync(user.Id);
-
-            userDbModel!.Id = user.Id;
-            userDbModel!.Username = user.Username;
-            userDbModel!.PasswordHashed = user.PasswordHashed;
-            userDbModel!.Email = user.Email;
-            userDbModel!.Role = user.Role;
-
+            _context.Users.Update(UserConverter.CoreToDbModel(user));
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

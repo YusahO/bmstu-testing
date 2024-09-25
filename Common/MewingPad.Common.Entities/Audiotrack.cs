@@ -1,6 +1,6 @@
 namespace MewingPad.Common.Entities;
 
-public class Audiotrack
+public class Audiotrack : BaseEntity
 {
     public Guid Id { get; set; }
     public string Title { get; set; }

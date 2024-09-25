@@ -45,21 +45,6 @@ public class ReportService(IReportRepository reportRepository) : IReportService
         return report;
     }
 
-    public async Task<Report> GetReportById(Guid reportId)
-    {
-        _logger.Verbose($"Entering GetReportById({reportId})");
-
-        var report = await _reportRepository.GetReportById(reportId);
-        if (report is null)
-        {
-            _logger.Error($"Report (Id = {reportId}) not found");
-            throw new ReportNotFoundException(reportId);
-        }
-
-        _logger.Verbose("Exiting GetReportById");
-        return report;
-    }
-
     public async Task<List<Report>> GetAllReports()
     {
         _logger.Verbose("Entering GetAllReports");

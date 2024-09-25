@@ -1,7 +1,6 @@
 using MewingPad.Services.ScoreService;
 using MewingPad.DTOs;
 using MewingPad.DTOs.Converters;
-using MewingPad.Utils.Token;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -43,7 +42,6 @@ public class ScoresController(IScoreService scoreService) : ControllerBase
         {
             _logger.Information("Received {@Score}", scoreDto);
             var accessToken = await HttpContext.GetTokenAsync("access_token");
-            scoreDto.AuthorId = Guid.Parse(TokenUtils.TryGetClaimOfType(accessToken!));
 
             if ((await _scoreService.GetScoreByPrimaryKey(scoreDto.AuthorId, scoreDto.AudiotrackId)) is null)
             {

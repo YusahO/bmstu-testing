@@ -1,114 +1,113 @@
+using MewingPad.Common.Enums;
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
+using Moq.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
-[Collection("Test Database")]
 public class TestUserRepository : BaseRepositoryTestClass
 {
     private readonly UserRepository _repository;
+    private readonly MockDbContextFactory _mockFactory;
 
-    public TestUserRepository(DatabaseFixture fixture)
-        : base(fixture)
+    public TestUserRepository()
     {
-        _repository = new(Fixture.CreateContext());
+        _mockFactory = new MockDbContextFactory();
+        _repository = new(_mockFactory.MockContext.Object);
+    }
+
+    private static User CreateUserCoreModel(
+        Guid id,
+        string username,
+        string email,
+        string password,
+        UserRole role = UserRole.User
+    )
+    {
+        return new UserCoreModelBuilder()
+            .WithId(id)
+            .WithUsername(username)
+            .WithEmail(email)
+            .WithPasswordHashed(password)
+            .WithRole(role)
+            .Build();
+    }
+
+    private static UserDbModel CreateUserDbo(
+        Guid id,
+        string username,
+        string email,
+        string password,
+        UserRole role = UserRole.User
+    )
+    {
+        return new UserDbModelBuilder()
+            .WithId(id)
+            .WithUsername(username)
+            .WithEmail(email)
+            .WithPasswordHashed(password)
+            .WithRole(role)
+            .Build();
+    }
+
+    private static UserDbModel CreateUserDboFromCore(User user)
+    {
+        return CreateUserDbo(
+            user.Id,
+            user.Username,
+            user.Email,
+            user.PasswordHashed,
+            user.Role
+        );
     }
 
     [Fact]
-    public async void AddUser_AddSingle_Ok()
+    public async void AddUser_AddUnique_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "User";
+        List<UserDbModel> actual = [];
+        var user = CreateUserCoreModel(
+            MakeGuid(1),
+            "username",
+            "email",
+            "password"
+        );
+        var userDbo = CreateUserDboFromCore(user);
 
-        var user = new UserCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithName(expectedName)
-            .Build();
+        _mockFactory
+            .MockUsersDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<UserDbModel>(), default)
+            )
+            .Callback<UserDbModel, CancellationToken>(
+                (u, token) => actual.Add(u)
+            );
 
         // Act
         await _repository.AddUser(user);
 
         // Assert
-        var actual = (from a in context.Users select a).ToList();
         Assert.Single(actual);
-        Assert.Equal(expectedId, actual[0].Id);
-        Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        Assert.Equal(expectedName, actual[0].Name);
+        Assert.Equal(user.Id, actual[0].Id);
+        Assert.Equal(user.Username, actual[0].Username);
+        Assert.Equal(user.Email, actual[0].Email);
+        Assert.Equal(user.PasswordHashed, actual[0].PasswordHashed);
+        Assert.Equal(user.Role, actual[0].Role);
     }
 
     [Fact]
     public async void AddUser_AddWithSameId_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var user = new UserCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("User")
-            .Build();
-        await context.Users.AddAsync(
-            new UserDbModelBuilder()
-                .WithId(user.Id)
-                .WithAuthorId(user.AuthorId)
-                .WithName(user.Name)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockUsersDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<UserDbModel>(), default)
+            )
+            .Callback<UserDbModel, CancellationToken>(
+                (a, token) => throw new RepositoryException()
+            );
 
         // Act
-        async Task Action() => await _repository.AddUser(user);
-
-        // Assert
-        await Assert.ThrowsAsync<RepositoryException>(Action);
-    }
-
-    [Fact]
-    public async void DeleteUser_DeleteExisting_Ok()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var user = new UserCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("User")
-            .Build();
-        await context.Users.AddAsync(
-            new UserDbModelBuilder()
-                .WithId(user.Id)
-                .WithAuthorId(user.AuthorId)
-                .WithName(user.Name)
-                .Build()
-        );
-        await context.SaveChangesAsync();
-
-        // Act
-        await _repository.DeleteUser(user.Id);
-
-        // Assert
-        Assert.Empty((from a in context.Users select a).ToList());
-    }
-
-    [Fact]
-    public async void DeleteUser_DeleteNonexistent_Error()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-
-        // Act
-        async Task Action() => await _repository.DeleteUser(new Guid());
+        async Task Action() => await _repository.AddUser(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -118,177 +117,228 @@ public class TestUserRepository : BaseRepositoryTestClass
     public async void UpdateUser_UpdateExisting_Ok()
     {
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
         var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "New";
+        const string expectedUsername = "username";
+        const string expectedEmail = "email";
+        const string expectedPassword = "password";
+        const UserRole expectedRole = UserRole.Admin;
 
-        var user = new UserCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithName("User")
-            .Build();
-        using (var context = Fixture.CreateContext())
-        {
-            await context.Users.AddAsync(
-                new UserDbModelBuilder()
-                    .WithId(user.Id)
-                    .WithAuthorId(user.AuthorId)
-                    .WithName(user.Name)
-                    .Build()
+        var user = CreateUserCoreModel(
+            expectedId,
+            expectedUsername,
+            "old",
+            expectedPassword,
+            expectedRole
+        );
+        var userDbo = CreateUserDboFromCore(user);
+        List<UserDbModel> userDbos = [userDbo];
+
+        _mockFactory
+            .MockUsersDbSet.Setup(s => s.Update(It.IsAny<UserDbModel>()))
+            .Callback(
+                (UserDbModel a) => userDbos[0].Email = new(expectedEmail)
             );
-            await context.SaveChangesAsync();
-        }
-
-        user.Name = "New";
 
         // Act
         await _repository.UpdateUser(user);
 
         // Assert
-        using (var context = Fixture.CreateContext())
-        {
-            var actual = (from a in context.Users select a).ToList();
-            Assert.Single(actual);
-            Assert.Equal(expectedId, actual[0].Id);
-            Assert.Equal(expectedName, actual[0].Name);
-            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        }
+        Assert.Single(userDbos);
+        Assert.Equal(expectedId, userDbos[0].Id);
+        Assert.Equal(expectedUsername, userDbos[0].Username);
+        Assert.Equal(expectedEmail, userDbos[0].Email);
+        Assert.Equal(expectedPassword, userDbos[0].PasswordHashed);
+        Assert.Equal(expectedRole, userDbos[0].Role);
     }
 
     [Fact]
     public async void UpdateUser_UpdateNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var user = new UserCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("User")
-            .Build();
+        _mockFactory
+            .MockUsersDbSet.Setup(s => s.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(default(UserDbModel)!);
+        _mockFactory
+            .MockUsersDbSet.Setup(s => s.Update(It.IsAny<UserDbModel>()))
+            .Callback((UserDbModel a) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.UpdateUser(user);
+        async Task Action() => await _repository.UpdateUser(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
-    [Fact]
-    public async void GetUserById_UserWithIdExists_ReturnsUser()
+    public static IEnumerable<object[]> GetUserById_GetTestData()
     {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var expectedId = MakeGuid(2);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "User2";
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[] { new UserDbModel(), new User() };
+        yield return new object[]
         {
-            await context.Users.AddAsync(
-                new UserDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(expectedAuthorId)
-                    .WithName($"User{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetUserById(expectedId);
-
-        // Assert
-        Assert.NotNull(actual);
-        Assert.Equal(expectedId, actual.Id);
-        Assert.Equal(expectedName, actual.Name);
-        Assert.Equal(expectedAuthorId, actual.AuthorId);
+            CreateUserDbo(MakeGuid(1), "username", "email", "password"),
+            CreateUserCoreModel(MakeGuid(1), "username", "email", "password"),
+        };
     }
 
-    [Fact]
-    public async void GetUserById_NoUserWithId_ReturnsNull()
+    [Theory]
+    [MemberData(nameof(GetUserById_GetTestData))]
+    public async Task GetUserById_ReturnsFound(
+        UserDbModel returnedUserDbo,
+        User expectedUser
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        Guid expectedId = MakeGuid(5);
-
-        for (byte i = 1; i < 4; ++i)
-        {
-            await context.Users.AddAsync(
-                new UserDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(DefaultUserId)
-                    .WithName($"User{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockUsersDbSet.Setup(x => x.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(returnedUserDbo);
 
         // Act
-        var actual = await _repository.GetUserById(expectedId);
+        var actual = await _repository.GetUserById(expectedUser.Id);
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedUser, actual);
     }
 
-    [Fact]
-    public async void GetUserById_NoUsers_Ok()
+    public static IEnumerable<object[]> GetUserByEmail_GetTestData()
+    {
+        yield return new object[] { new List<UserDbModel>([]), default(User)! };
+        yield return new object[]
+        {
+            new List<UserDbModel>(
+                [CreateUserDbo(MakeGuid(1), "username", "email", "password")]
+            ),
+            CreateUserCoreModel(MakeGuid(1), "username", "email", "password"),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetUserByEmail_GetTestData))]
+    public async Task GetUserByEmail_ReturnsFound(
+        List<UserDbModel> returnedUserDbos,
+        User expectedUser
+    )
     {
         // Arrange
+        var expectedEmail = "email";
+        _mockFactory
+            .MockContext.Setup(x => x.Users)
+            .ReturnsDbSet(returnedUserDbos);
 
         // Act
-        var actual = await _repository.GetUserById(new Guid());
+        var actual = await _repository.GetUserByEmail(expectedEmail);
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedUser, actual);
     }
 
-    [Fact]
-    public async void GetAllUsers_UsersExist_ReturnsUsers()
+    public static IEnumerable<object[]> GetAdmins_GetTestData()
     {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[]
         {
-            await context.Users.AddAsync(
-                new UserDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(DefaultUserId)
-                    .WithName($"User{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+            new List<UserDbModel>([]),
+            new List<User>([]),
+        };
+        yield return new object[]
+        {
+            new List<UserDbModel>(
+                [
+                    CreateUserDbo(
+                        MakeGuid(1),
+                        "username",
+                        "email",
+                        "password",
+                        UserRole.Guest
+                    ),
+                ]
+            ),
+            new List<User>([]),
+        };
+        yield return new object[]
+        {
+            new List<UserDbModel>(
+                [
+                    CreateUserDbo(
+                        MakeGuid(1),
+                        "username",
+                        "email",
+                        "password",
+                        UserRole.Admin
+                    ),
+                ]
+            ),
+            new List<User>(
+                [
+                    CreateUserCoreModel(
+                        MakeGuid(1),
+                        "username",
+                        "email",
+                        "password",
+                        UserRole.Admin
+                    ),
+                ]
+            ),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetAdmins_GetTestData))]
+    public async void GetAdmins_ReturnsFound(
+        List<UserDbModel> returnedUserDbos,
+        List<User> expectedUsers
+    )
+    {
+        // Arrange
+        _mockFactory
+            .MockContext.Setup(x => x.Users)
+            .ReturnsDbSet(returnedUserDbos);
+
+        // Act
+        var actual = await _repository.GetAdmins();
+
+        // Assert
+        Assert.Equal(expectedUsers, actual);
+    }
+
+    public static IEnumerable<object[]> GetAllUsers_GetTestData()
+    {
+        yield return new object[]
+        {
+            new List<UserDbModel>([]),
+            new List<User>([]),
+        };
+        yield return new object[]
+        {
+            new List<UserDbModel>(
+                [CreateUserDbo(MakeGuid(1), "username", "email", "password")]
+            ),
+            new List<User>(
+                [
+                    CreateUserCoreModel(
+                        MakeGuid(1),
+                        "username",
+                        "email",
+                        "password"
+                    ),
+                ]
+            ),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetAllUsers_GetTestData))]
+    public async void GetAllUsers_ReturnsFound(
+        List<UserDbModel> returnedUserDbos,
+        List<User> expectedUsers
+    )
+    {
+        // Arrange
+        _mockFactory
+            .MockContext.Setup(x => x.Users)
+            .ReturnsDbSet(returnedUserDbos);
 
         // Act
         var actual = await _repository.GetAllUsers();
 
         // Assert
-        Assert.Equal(3, actual.Count);
-    }
-
-    [Fact]
-    public async void GetAllUsers_NoUsersExist_ReturnsEmpty()
-    {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetAllUsers();
-
-        // Assert
-        Assert.Empty(actual);
+        Assert.Equal(expectedUsers, actual);
     }
 }

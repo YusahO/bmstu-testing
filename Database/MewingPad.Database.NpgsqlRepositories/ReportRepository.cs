@@ -20,7 +20,9 @@ public class ReportRepository(MewingPadDbContext context) : IReportRepository
 
         try
         {
-            await _context.Reports.AddAsync(ReportConverter.CoreToDbModel(report));
+            await _context.Reports.AddAsync(
+                ReportConverter.CoreToDbModel(report)
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -38,9 +40,9 @@ public class ReportRepository(MewingPadDbContext context) : IReportRepository
         List<Report> reports;
         try
         {
-            reports = await _context.Reports
-                    .Select(r => ReportConverter.DbToCoreModel(r))
-                    .ToListAsync();
+            reports = await _context
+                .Reports.Select(r => ReportConverter.DbToCoreModel(r))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -77,13 +79,7 @@ public class ReportRepository(MewingPadDbContext context) : IReportRepository
 
         try
         {
-            var reportDbModel = await _context.Reports.FindAsync(report.Id);
-
-            reportDbModel!.AuthorId = report.AuthorId;
-            reportDbModel!.AudiotrackId = report.AudiotrackId;
-            reportDbModel!.Text = report.Text;
-            reportDbModel!.Status = report.Status;
-
+            _context.Reports.Update(ReportConverter.CoreToDbModel(report));
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

@@ -31,16 +31,6 @@ public class UserService(IUserRepository repository) : IUserService
         return user;
     }
 
-    public async Task<List<User>> GetAllUsers()
-    {
-        _logger.Verbose("Entering GetAllUsers");
-
-        var users = await _userRepository.GetAllUsers();
-
-        _logger.Verbose("Exiting GetAllUsers");
-        return users;
-    }
-
     public async Task<User> GetUserById(Guid userId)
     {
         _logger.Verbose($"Entering GetUserById({userId})");

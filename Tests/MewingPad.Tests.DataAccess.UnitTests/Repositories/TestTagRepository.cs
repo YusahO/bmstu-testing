@@ -1,73 +1,83 @@
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
+using Moq.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
-[Collection("Test Database")]
 public class TestTagRepository : BaseRepositoryTestClass
 {
     private readonly TagRepository _repository;
+    private readonly MockDbContextFactory _mockFactory;
 
-    public TestTagRepository(DatabaseFixture fixture)
-        : base(fixture)
+    public TestTagRepository()
     {
-        _repository = new(Fixture.CreateContext());
+        _mockFactory = new MockDbContextFactory();
+        _repository = new(_mockFactory.MockContext.Object);
+    }
+
+    private static Tag CreateTagCoreModel(Guid id, Guid authorId, string name)
+    {
+        return new TagCoreModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithName(name)
+            .Build();
+    }
+
+    private static TagDbModel CreateTagDbo(Guid id, Guid authorId, string name)
+    {
+        return new TagDbModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithName(name)
+            .Build();
+    }
+
+    private static TagDbModel CreateTagDboFromCore(Tag tag)
+    {
+        return CreateTagDbo(tag.Id, tag.AuthorId, tag.Name);
     }
 
     [Fact]
-    public async void AddTag_AddSingle_Ok()
+    public async void AddTag_AddUnique_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
+        List<TagDbModel> actual = [];
+        var tag = CreateTagCoreModel(MakeGuid(1), MakeGuid(1), "name");
+        var tagDbo = CreateTagDboFromCore(tag);
 
-        var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "Tag";
-
-        var tag = new TagCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithName(expectedName)
-            .Build();
+        _mockFactory
+            .MockTagsDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<TagDbModel>(), default)
+            )
+            .Callback<TagDbModel, CancellationToken>(
+                (s, token) => actual.Add(s)
+            );
 
         // Act
         await _repository.AddTag(tag);
 
         // Assert
-        var actual = (from a in context.Tags select a).ToList();
         Assert.Single(actual);
-        Assert.Equal(expectedId, actual[0].Id);
-        Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        Assert.Equal(expectedName, actual[0].Name);
+        Assert.Equal(tag.Id, actual[0].Id);
+        Assert.Equal(tag.AuthorId, actual[0].AuthorId);
+        Assert.Equal(tag.Name, actual[0].Name);
     }
 
     [Fact]
     public async void AddTag_AddWithSameId_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var tag = new TagCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
-            .Build();
-        await context.Tags.AddAsync(
-            new TagDbModelBuilder()
-                .WithId(tag.Id)
-                .WithAuthorId(tag.AuthorId)
-                .WithName(tag.Name)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockTagsDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<TagDbModel>(), default)
+            )
+            .Callback<TagDbModel, CancellationToken>(
+                (s, token) => throw new RepositoryException()
+            );
 
         // Act
-        async Task Action() => await _repository.AddTag(tag);
+        async Task Action() => await _repository.AddTag(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -76,38 +86,37 @@ public class TestTagRepository : BaseRepositoryTestClass
     [Fact]
     public async void DeleteTag_DeleteExisting_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
+        Guid tagId = MakeGuid(1);
+        List<TagDbModel> tagDbos =
+        [
+            CreateTagDbo(MakeGuid(1), MakeGuid(1), "name"),
+        ];
 
-        var tag = new TagCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
-            .Build();
-        await context.Tags.AddAsync(
-            new TagDbModelBuilder()
-                .WithId(tag.Id)
-                .WithAuthorId(tag.AuthorId)
-                .WithName(tag.Name)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(tagDbos[0]);
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.Remove(It.IsAny<TagDbModel>()))
+            .Callback((TagDbModel t) => tagDbos.Remove(t));
 
         // Act
-        await _repository.DeleteTag(tag.Id);
+        await _repository.DeleteTag(tagId);
 
         // Assert
-        Assert.Empty((from a in context.Tags select a).ToList());
+        Assert.Empty(tagDbos);
     }
 
     [Fact]
     public async void DeleteTag_DeleteNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(default(TagDbModel)!);
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.Remove(It.IsAny<TagDbModel>()))
+            .Callback((TagDbModel a) => throw new RepositoryException());
 
         // Act
         async Task Action() => await _repository.DeleteTag(new Guid());
@@ -120,177 +129,104 @@ public class TestTagRepository : BaseRepositoryTestClass
     public async void UpdateTag_UpdateExisting_Ok()
     {
         // Arrange
-        await AddDefaultUserWithPlaylist();
+        Guid expectedTagId = MakeGuid(1);
+        Guid expectedAuthorId = MakeGuid(1);
+        const string expectedName = "name";
 
-        var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "New";
+        var tag = CreateTagCoreModel(
+            expectedTagId,
+            expectedAuthorId,
+            expectedName
+        );
+        var tagDbo = CreateTagDboFromCore(tag);
+        List<TagDbModel> tagDbos = [tagDbo];
 
-        var tag = new TagCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithName("Tag")
-            .Build();
-        using (var context = Fixture.CreateContext())
-        {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
-                    .WithId(tag.Id)
-                    .WithAuthorId(tag.AuthorId)
-                    .WithName(tag.Name)
-                    .Build()
-            );
-            await context.SaveChangesAsync();
-        }
-
-        tag.Name = "New";
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.Update(It.IsAny<TagDbModel>()))
+            .Callback((TagDbModel s) => tagDbos[0].Name = new(expectedName));
 
         // Act
         await _repository.UpdateTag(tag);
 
         // Assert
-        using (var context = Fixture.CreateContext())
-        {
-            var actual = (from a in context.Tags select a).ToList();
-            Assert.Single(actual);
-            Assert.Equal(expectedId, actual[0].Id);
-            Assert.Equal(expectedName, actual[0].Name);
-            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        }
+        Assert.Single(tagDbos);
+        Assert.Equal(tag.Id, tagDbos[0].Id);
+        Assert.Equal(tag.AuthorId, tagDbos[0].AuthorId);
+        Assert.Equal(expectedName, tagDbos[0].Name);
     }
 
     [Fact]
     public async void UpdateTag_UpdateNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var tag = new TagCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithName("Tag")
-            .Build();
+        _mockFactory
+            .MockTagsDbSet.Setup(s => s.Update(It.IsAny<TagDbModel>()))
+            .Callback((TagDbModel s) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.UpdateTag(tag);
+        async Task Action() => await _repository.UpdateTag(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
-    [Fact]
-    public async void GetTagById_TagWithIdExists_ReturnsTag()
+    public static IEnumerable<object[]> GetTagById_GetTestData()
     {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        var expectedId = MakeGuid(2);
-        var expectedAuthorId = DefaultUserId;
-        const string expectedName = "Tag2";
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[] { default(TagDbModel)!, default(Tag)! };
+        yield return new object[]
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(expectedAuthorId)
-                    .WithName($"Tag{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetTagById(expectedId);
-
-        // Assert
-        Assert.NotNull(actual);
-        Assert.Equal(expectedId, actual.Id);
-        Assert.Equal(expectedName, actual.Name);
-        Assert.Equal(expectedAuthorId, actual.AuthorId);
+            CreateTagDbo(MakeGuid(1), MakeGuid(1), "name"),
+            CreateTagCoreModel(MakeGuid(1), MakeGuid(1), "name"),
+        };
     }
 
-    [Fact]
-    public async void GetTagById_NoTagWithId_ReturnsNull()
+    [Theory]
+    [MemberData(nameof(GetTagById_GetTestData))]
+    public async void GetTagById_ReturnsFound(
+        TagDbModel returnedTagDbo,
+        Tag expectedTag
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        Guid expectedId = MakeGuid(5);
-
-        for (byte i = 1; i < 4; ++i)
-        {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(DefaultUserId)
-                    .WithName($"Tag{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockTagsDbSet.Setup(x => x.FindAsync(It.IsAny<object?[]?>()))
+            .ReturnsAsync(returnedTagDbo);
 
         // Act
-        var actual = await _repository.GetTagById(expectedId);
+        var actual = await _repository.GetTagById(new());
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedTag, actual);
     }
 
-    [Fact]
-    public async void GetTagById_NoTags_Ok()
+    public static IEnumerable<object[]> GetAllTags_GetTestData()
     {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetTagById(new Guid());
-
-        // Assert
-        Assert.Null(actual);
-    }
-
-    [Fact]
-    public async void GetAllTags_TagsExist_ReturnsTags()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[] { new List<TagDbModel>(), new List<Tag>() };
+        yield return new object[]
         {
-            await context.Tags.AddAsync(
-                new TagDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(DefaultUserId)
-                    .WithName($"Tag{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+            new List<TagDbModel>(
+                [CreateTagDbo(MakeGuid(1), MakeGuid(1), "name")]
+            ),
+            new List<Tag>(
+                [CreateTagCoreModel(MakeGuid(1), MakeGuid(1), "name")]
+            ),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetAllTags_GetTestData))]
+    public async void GetAllTags_ReturnsFound(
+        List<TagDbModel> tagDbos,
+        List<Tag> expectedTags
+    )
+    {
+        // Arrange
+        _mockFactory.MockContext.Setup(x => x.Tags).ReturnsDbSet(tagDbos);
 
         // Act
         var actual = await _repository.GetAllTags();
 
         // Assert
-        Assert.Equal(3, actual.Count);
-    }
-
-    [Fact]
-    public async void GetAllTags_NoTagsExist_ReturnsEmpty()
-    {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetAllTags();
-
-        // Assert
-        Assert.Empty(actual);
+        Assert.Equal(expectedTags, actual);
     }
 }

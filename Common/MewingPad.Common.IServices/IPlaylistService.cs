@@ -13,5 +13,4 @@ public interface IPlaylistService
     Task<List<Playlist>> GetUserPlaylistsContainingAudiotrack(Guid userId, Guid audiotrackId);
     Task AddAudiotrackToPlaylist(Guid playlistId, Guid audiotrackId);
     Task RemoveAudiotrackFromPlaylist(Guid playlistId, Guid audiotrackId);
-    Task RemoveAudiotracksFromPlaylist(Guid playlistId, List<Guid> audiotrackIds);
 }

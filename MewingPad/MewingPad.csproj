@@ -43,7 +43,6 @@
     <ProjectReference Include="..\Database\MewingPad.Database.Context\MewingPad.Database.Context.csproj" />
     <ProjectReference Include="..\Database\MewingPad.Database.NpgsqlRepositories\MewingPad.Database.NpgsqlRepositories.csproj" />
     <ProjectReference Include="..\Common\MewingPad.Common.Entities\MewingPad.Common.Entities.csproj" />
-    <ProjectReference Include="..\Utils\MewingPad.Utils.Token\MewingPad.Utils.Token.csproj" />
   </ItemGroup>
 
 </Project>

@@ -56,9 +56,9 @@ public class TagRepository(MewingPadDbContext context) : ITagRepository
         List<Tag> tags;
         try
         {
-            tags = await _context.Tags
-                    .Select(t => TagConverter.DbToCoreModel(t))
-                    .ToListAsync();
+            tags = await _context
+                .Tags.Select(t => TagConverter.DbToCoreModel(t))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -94,12 +94,7 @@ public class TagRepository(MewingPadDbContext context) : ITagRepository
 
         try
         {
-            var tagDbModel = await _context.Tags.FindAsync(tag.Id);
-
-            tagDbModel!.Id = tag.Id;
-            tagDbModel!.AuthorId = tag.AuthorId;
-            tagDbModel!.Name = tag.Name;
-
+            _context.Tags.Update(TagConverter.CoreToDbModel(tag));
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

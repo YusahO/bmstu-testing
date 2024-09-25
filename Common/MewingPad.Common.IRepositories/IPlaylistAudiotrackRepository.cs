@@ -9,6 +9,5 @@ public interface IPlaylistAudiotrackRepository
     Task AddAudiotrackToPlaylist(Guid playlistId, Guid audiotrackId);
     Task<List<Audiotrack>> GetAllAudiotracksFromPlaylist(Guid playlistId);
     Task RemoveAudiotrackFromPlaylist(Guid playlistId, Guid audiotrackId);
-    Task RemoveAudiotracksFromPlaylist(Guid playlistId, List<Guid> audiotrackIds);
     Task<bool> IsAudiotrackInPlaylist(Guid audiotrackId, Guid playlistId);
 }

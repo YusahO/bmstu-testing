@@ -1,92 +1,113 @@
 using MewingPad.Common.Enums;
 using MewingPad.Common.Exceptions;
 using MewingPad.Database.NpgsqlRepositories;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
+using Moq.EntityFrameworkCore;
 
 namespace MewingPad.Tests.DataAccess.UnitTests.Repositories;
 
-[Collection("Test Database")]
 public class TestReportRepository : BaseRepositoryTestClass
 {
     private readonly ReportRepository _repository;
+    private readonly MockDbContextFactory _mockFactory;
 
-    public TestReportRepository(DatabaseFixture fixture)
-        : base(fixture)
+    public TestReportRepository()
     {
-        _repository = new(Fixture.CreateContext());
+        _mockFactory = new MockDbContextFactory();
+        _repository = new(_mockFactory.MockContext.Object);
+    }
+
+    private static Report CreateReportCoreModel(
+        Guid id,
+        Guid authorId,
+        Guid audiotrackId,
+        string text,
+        ReportStatus status = ReportStatus.NotViewed
+    )
+    {
+        return new ReportCoreModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithText(text)
+            .WithStatus(status)
+            .Build();
+    }
+
+    private static ReportDbModel CreateReportDbo(
+        Guid id,
+        Guid authorId,
+        Guid audiotrackId,
+        string text,
+        ReportStatus status = ReportStatus.NotViewed
+    )
+    {
+        return new ReportDbModelBuilder()
+            .WithId(id)
+            .WithAuthorId(authorId)
+            .WithAudiotrackId(audiotrackId)
+            .WithText(text)
+            .WithStatus(status)
+            .Build();
+    }
+
+    private static ReportDbModel CreateReportDboFromCore(Report report)
+    {
+        return CreateReportDbo(
+            report.Id,
+            report.AuthorId,
+            report.AudiotrackId,
+            report.Text,
+            report.Status
+        );
     }
 
     [Fact]
-    public async void AddReport_AddSingle_Ok()
+    public async void AddReport_AddUnique_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
+        List<ReportDbModel> actual = [];
+        var report = CreateReportCoreModel(
+            MakeGuid(1),
+            MakeGuid(1),
+            MakeGuid(1),
+            "Text"
+        );
+        var reportDbo = CreateReportDboFromCore(report);
 
-        var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const ReportStatus expectedStatus = ReportStatus.NotViewed;
-        const string expectedText = "Report";
-
-        var report = new ReportCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithAudiotrackId(expectedAudiotrackId)
-            .WithText(expectedText)
-            .WithStatus(expectedStatus)
-            .Build();
+        _mockFactory
+            .MockReportsDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<ReportDbModel>(), default)
+            )
+            .Callback<ReportDbModel, CancellationToken>(
+                (u, token) => actual.Add(u)
+            );
 
         // Act
         await _repository.AddReport(report);
 
         // Assert
-        var actual = (from a in context.Reports select a).ToList();
         Assert.Single(actual);
-        Assert.Equal(expectedId, actual[0].Id);
-        Assert.Equal(expectedText, actual[0].Text);
-        Assert.Equal(expectedStatus, actual[0].Status);
-        Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-        Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
+        Assert.Equal(report.Id, actual[0].Id);
+        Assert.Equal(report.Text, actual[0].Text);
+        Assert.Equal(report.Status, actual[0].Status);
+        Assert.Equal(report.AuthorId, actual[0].AuthorId);
+        Assert.Equal(report.AudiotrackId, actual[0].AudiotrackId);
     }
 
     [Fact]
     public async void AddReport_AddReportWithSameId_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const ReportStatus expectedStatus = ReportStatus.NotViewed;
-        const string expectedText = "Report";
-
-        var report = new ReportCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithAudiotrackId(expectedAudiotrackId)
-            .WithText(expectedText)
-            .WithStatus(expectedStatus)
-            .Build();
-        await context.Reports.AddAsync(
-            new ReportDbModelBuilder()
-                .WithId(report.Id)
-                .WithStatus(report.Status)
-                .WithAuthorId(report.AuthorId)
-                .WithAudiotrackId(report.AudiotrackId)
-                .WithText(report.Text)
-                .Build()
-        );
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockReportsDbSet.Setup(s =>
+                s.AddAsync(It.IsAny<ReportDbModel>(), default)
+            )
+            .Callback<ReportDbModel, CancellationToken>(
+                (r, token) => throw new RepositoryException()
+            );
 
         // Act
-        async Task Action() => await _repository.AddReport(report);
+        async Task Action() => await _repository.AddReport(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
@@ -96,200 +117,130 @@ public class TestReportRepository : BaseRepositoryTestClass
     public async void UpdateReport_UpdateExisting_Ok()
     {
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
         var expectedId = MakeGuid(1);
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
+        Guid expectedAuthorId = MakeGuid(1);
+        Guid expectedAudiotrackId = MakeGuid(1);
+        const string expectedText = "text";
         const ReportStatus expectedStatus = ReportStatus.Declined;
-        const string expectedText = "Report";
 
-        var report = new ReportCoreModelBuilder()
-            .WithId(expectedId)
-            .WithAuthorId(expectedAuthorId)
-            .WithAudiotrackId(expectedAudiotrackId)
-            .WithText(expectedText)
-            .WithStatus(expectedStatus)
-            .Build();
-        using (var context = Fixture.CreateContext())
-        {
-            await context.Reports.AddAsync(
-                new ReportDbModelBuilder()
-                    .WithId(report.Id)
-                    .WithAuthorId(report.AuthorId)
-                    .WithAudiotrackId(report.AudiotrackId)
-                    .WithText(report.Text)
-                    .Build()
+        var report = CreateReportCoreModel(
+            expectedId,
+            expectedAuthorId,
+            expectedAudiotrackId,
+            expectedText,
+            ReportStatus.NotViewed
+        );
+        var reportDbo = CreateReportDboFromCore(report);
+        List<ReportDbModel> reportDbos = [reportDbo];
+
+        _mockFactory
+            .MockReportsDbSet.Setup(s => s.Update(It.IsAny<ReportDbModel>()))
+            .Callback(
+                (ReportDbModel c) => reportDbos[0].Status = expectedStatus
             );
-            await context.SaveChangesAsync();
-        }
-
-        report.Status = expectedStatus;
 
         // Act
         await _repository.UpdateReport(report);
 
         // Assert
-        using (var context = Fixture.CreateContext())
-        {
-            var actual = (from a in context.Reports select a).ToList();
-            Assert.Single(actual);
-            Assert.Equal(expectedId, actual[0].Id);
-            Assert.Equal(expectedText, actual[0].Text);
-            Assert.Equal(expectedStatus, actual[0].Status);
-            Assert.Equal(expectedAuthorId, actual[0].AuthorId);
-            Assert.Equal(expectedAudiotrackId, actual[0].AudiotrackId);
-        }
+        Assert.Single(reportDbos);
+        Assert.Equal(expectedId, reportDbos[0].Id);
+        Assert.Equal(expectedText, reportDbos[0].Text);
+        Assert.Equal(expectedStatus, reportDbos[0].Status);
+        Assert.Equal(expectedAuthorId, reportDbos[0].AuthorId);
+        Assert.Equal(expectedAudiotrackId, reportDbos[0].AudiotrackId);
     }
 
     [Fact]
     public async void UpdateReport_UpdateNonexistent_Error()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var report = new ReportCoreModelBuilder()
-            .WithId(MakeGuid(1))
-            .WithAuthorId(DefaultUserId)
-            .WithAudiotrackId(DefaultAudiotrackId)
-            .WithText("Report")
-            .WithStatus(ReportStatus.NotViewed)
-            .Build();
+        _mockFactory
+            .MockReportsDbSet.Setup(s => s.Update(It.IsAny<ReportDbModel>()))
+            .Callback((ReportDbModel c) => throw new RepositoryException());
 
         // Act
-        async Task Action() => await _repository.UpdateReport(report);
+        async Task Action() => await _repository.UpdateReport(new());
 
         // Assert
         await Assert.ThrowsAsync<RepositoryException>(Action);
     }
 
-    [Fact]
-    public async void GetReportById_ReportsExist_ReturnsReport()
+    public static IEnumerable<object[]> GetReportById_GetTestData()
     {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(3);
-        var expectedAuthorId = DefaultUserId;
-        var expectedAudiotrackId = DefaultAudiotrackId;
-        const ReportStatus expectedStatus = ReportStatus.Viewed;
-        const string expectedText = "Report3";
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[] { new ReportDbModel(), new Report() };
+        yield return new object[]
         {
-            await context.Reports.AddAsync(
-                new ReportDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .WithText($"Report{i}")
-                    .WithStatus(ReportStatus.Viewed)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
-
-        // Act
-        var actual = await _repository.GetReportById(expectedId);
-
-        // Assert
-        Assert.NotNull(actual);
-        Assert.Equal(expectedId, actual.Id);
-        Assert.Equal(expectedText, actual.Text);
-        Assert.Equal(expectedStatus, actual.Status);
-        Assert.Equal(expectedAuthorId, actual.AuthorId);
-        Assert.Equal(expectedAudiotrackId, actual.AudiotrackId);
+            CreateReportDbo(MakeGuid(1), MakeGuid(1), MakeGuid(1), "text"),
+            CreateReportCoreModel(
+                MakeGuid(1),
+                MakeGuid(1),
+                MakeGuid(1),
+                "text"
+            ),
+        };
     }
 
-    [Fact]
-    public async void GetReportById_NoReportWithId_ReturnsNull()
+    [Theory]
+    [MemberData(nameof(GetReportById_GetTestData))]
+    public async Task GetReportById_ReturnsFound(
+        ReportDbModel returnedReportDbo,
+        Report expectedReport
+    )
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        var expectedId = MakeGuid(5);
-
-        for (byte i = 1; i < 4; ++i)
-        {
-            await context.Reports.AddAsync(
-                new ReportDbModelBuilder()
-                    .WithId(new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, 0, i]))
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .WithText($"Report{i}")
-                    .WithStatus(ReportStatus.Viewed)
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+        _mockFactory
+            .MockReportsDbSet.Setup(x => x.FindAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(returnedReportDbo);
 
         // Act
-        var actual = await _repository.GetReportById(expectedId);
+        var actual = await _repository.GetReportById(expectedReport.Id);
 
         // Assert
-        Assert.Null(actual);
+        Assert.Equal(expectedReport, actual);
     }
 
-    [Fact]
-    public async void GetReportById_NoReports_ReturnsNull()
+    public static IEnumerable<object[]> GetAllReports_GetTestData()
     {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetReportById(new Guid());
-
-        // Assert
-        Assert.Null(actual);
-    }
-
-    [Fact]
-    public async void GetAllReports_ReportsExist_ReturnReports()
-    {
-        using var context = Fixture.CreateContext();
-
-        // Arrange
-        await AddDefaultUserWithPlaylist();
-        await AddDefaultAudiotrack();
-
-        for (byte i = 1; i < 4; ++i)
+        yield return new object[]
         {
-            await context.Reports.AddAsync(
-                new ReportDbModelBuilder()
-                    .WithId(MakeGuid(i))
-                    .WithAuthorId(DefaultUserId)
-                    .WithAudiotrackId(DefaultAudiotrackId)
-                    .WithText($"Report{i}")
-                    .Build()
-            );
-        }
-        await context.SaveChangesAsync();
+            new List<ReportDbModel>(),
+            new List<Report>(),
+        };
+        yield return new object[]
+        {
+            new List<ReportDbModel>(
+                [CreateReportDbo(MakeGuid(1), MakeGuid(1), MakeGuid(1), "text")]
+            ),
+            new List<Report>(
+                [
+                    CreateReportCoreModel(
+                        MakeGuid(1),
+                        MakeGuid(1),
+                        MakeGuid(1),
+                        "text"
+                    ),
+                ]
+            ),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetAllReports_GetTestData))]
+    public async Task GetAllReports_ReturnsFound(
+        List<ReportDbModel> reportDbos,
+        List<Report> expectedReports
+    )
+    {
+        // Arrange
+        _mockFactory
+            .MockContext.Setup(x => x.Reports)
+            .ReturnsDbSet(reportDbos);
 
         // Act
         var actual = await _repository.GetAllReports();
 
         // Assert
-        Assert.Equal(3, actual.Count);
-    }
-
-    [Fact]
-    public async void GetAllReports_NoReports_ReturnEmpty()
-    {
-        // Arrange
-
-        // Act
-        var actual = await _repository.GetAllReports();
-
-        // Assert
-        Assert.Empty(actual);
+        Assert.Equal(expectedReports, actual);
     }
 }

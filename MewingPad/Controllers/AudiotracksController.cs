@@ -56,7 +56,6 @@ public class AudiotracksController(IAudiotrackService audiotrackService,
             _logger.Information("Received {@AudiotrackId}", audiotrackId);
             var audiotrack = await _audiotrackService.GetAudiotrackById(audiotrackId);
             var audiotrackDto = AudiotrackConverter.CoreModelToDto(audiotrack);
-            audiotrackDto.MeanScore = await _audiotrackService.GetAudiotrackMeanScore(audiotrackId);
             return Ok(audiotrackDto);
         }
         catch (Exception ex)

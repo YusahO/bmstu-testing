@@ -9,7 +9,8 @@ using Serilog;
 
 namespace MewingPad.Database.NpgsqlRepositories;
 
-public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepository
+public class CommentaryRepository(MewingPadDbContext context)
+    : ICommentaryRepository
 {
     private readonly MewingPadDbContext _context = context;
 
@@ -21,7 +22,9 @@ public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepos
 
         try
         {
-            await _context.Commentaries.AddAsync(CommentaryConverter.CoreToDbModel(commentary)!);
+            await _context.Commentaries.AddAsync(
+                CommentaryConverter.CoreToDbModel(commentary)!
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -38,7 +41,9 @@ public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepos
 
         try
         {
-            var commentaryDbModel = await _context.Commentaries.FindAsync(commentaryId);
+            var commentaryDbModel = await _context.Commentaries.FindAsync(
+                commentaryId
+            );
             _context.Commentaries.Remove(commentaryDbModel!);
             await _context.SaveChangesAsync();
         }
@@ -50,17 +55,19 @@ public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepos
         _logger.Verbose("Exiting DeleteCommentary");
     }
 
-    public async Task<List<Commentary>> GetAudiotrackCommentaries(Guid audiotrackId)
+    public async Task<List<Commentary>> GetAudiotrackCommentaries(
+        Guid audiotrackId
+    )
     {
         _logger.Verbose("Entering GetAudiotrackCommentaries");
 
         List<Commentary> commentaries;
         try
         {
-            commentaries = await _context.Commentaries
-                    .Where(c => c.AudiotrackId == audiotrackId)
-                    .Select(c => CommentaryConverter.DbToCoreModel(c))
-                    .ToListAsync();
+            commentaries = await _context
+                .Commentaries.Where(c => c.AudiotrackId == audiotrackId)
+                .Select(c => CommentaryConverter.DbToCoreModel(c))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -78,7 +85,9 @@ public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepos
         Commentary? commentary;
         try
         {
-            var commentaryDbModel = await _context.Commentaries.FindAsync(commentaryId);
+            var commentaryDbModel = await _context.Commentaries.FindAsync(
+                commentaryId
+            );
             commentary = CommentaryConverter.DbToCoreModel(commentaryDbModel);
         }
         catch (Exception ex)
@@ -96,13 +105,9 @@ public class CommentaryRepository(MewingPadDbContext context) : ICommentaryRepos
 
         try
         {
-            var commentaryDbModel = await _context.Commentaries.FindAsync(commentary.Id);
-
-            commentaryDbModel!.Id = commentary.Id;
-            commentaryDbModel!.AuthorId = commentary.AuthorId;
-            commentaryDbModel!.AudiotrackId = commentary.AudiotrackId;
-            commentaryDbModel!.Text = commentary.Text;
-
+            _context.Commentaries.Update(
+                CommentaryConverter.CoreToDbModel(commentary)
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

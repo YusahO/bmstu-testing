@@ -1,7 +1,7 @@
 using MewingPad.Database.Models.Converters;
-using MewingPad.Tests.DataAccess.UnitTests.Builders;
 
-namespace MewingPad.Tests.DataAccess.UnitTests.Controllers;
+
+namespace MewingPad.Tests.DataAccess.UnitTests.Converters;
 
 public class TestPlaylistConverter
 {

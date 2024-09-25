@@ -95,27 +95,6 @@ public class AudiotrackRepository(MewingPadDbContext context)
         return audiotrack;
     }
 
-    public async Task<float> GetAudiotrackMeanScore(Guid audiotrackId)
-    {
-        _logger.Verbose("Entering GetAudiotrackMeanScore");
-
-        float score;
-        try
-        {
-            var audiotrackDbModel = await _context.Audiotracks.FindAsync(
-                audiotrackId
-            );
-            score = audiotrackDbModel!.MeanScore;
-        }
-        catch (Exception ex)
-        {
-            throw new RepositoryException(ex.Message, ex.InnerException);
-        }
-
-        _logger.Verbose("Exiting GetAudiotrackMeanScore");
-        return score;
-    }
-
     public async Task<List<Audiotrack>> GetAudiotracksByTitle(string title)
     {
         _logger.Verbose("Entering GetAudiotracksByTitle");
@@ -143,7 +122,9 @@ public class AudiotrackRepository(MewingPadDbContext context)
 
         try
         {
-            _context.Update(AudiotrackConverter.CoreToDbModel(audiotrack));
+            _context.Audiotracks.Update(
+                AudiotrackConverter.CoreToDbModel(audiotrack)
+            );
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)
