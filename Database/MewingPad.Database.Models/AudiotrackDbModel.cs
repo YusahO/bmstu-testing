@@ -8,6 +8,10 @@ public class AudiotrackDbModel
 {
     public AudiotrackDbModel()
     {
+        Id = new();
+        Title = "";
+        AuthorId = new();
+        Filepath = "";
     }
 
     [Key]

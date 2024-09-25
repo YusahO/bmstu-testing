@@ -19,13 +19,15 @@ public class AudioManager
         _baseUri = new Uri(_config["ApiSettings:AudioServerAddress"]!);
     }
 
-    virtual public async Task<Stream?> GetFileStreamAsync(string srcpath)
+    public virtual async Task<Stream?> GetFileStreamAsync(string srcpath)
     {
         _logger.Verbose("Entering GetFileStreamAsync method");
         Stream stream;
         try
         {
-            stream = await _client.GetStreamAsync(_baseUri + $"audiotracks/{srcpath}");
+            stream = await _client.GetStreamAsync(
+                _baseUri + $"audiotracks/{srcpath}"
+            );
         }
         catch (Exception ex)
         {
@@ -36,7 +38,7 @@ public class AudioManager
         return stream;
     }
 
-    virtual public async Task<bool> CreateFileFromStreamAsync(
+    public virtual async Task<bool> CreateFileFromStreamAsync(
         Stream fileStream,
         string fileName
     )
@@ -79,14 +81,14 @@ public class AudioManager
         return true;
     }
 
-    virtual public async Task<bool> DeleteFileAsync(string filepath)
+    public virtual async Task<bool> DeleteFileAsync(string filepath)
     {
         _logger.Verbose("Entering DeleteFileAsync method");
 
         try
         {
             HttpResponseMessage response = await _client.DeleteAsync(
-                $"audiotracks/{filepath}"
+                _baseUri + $"audiotracks/{filepath}"
             );
             if (response.IsSuccessStatusCode)
             {
@@ -109,7 +111,7 @@ public class AudioManager
         return true;
     }
 
-    virtual public async Task<bool> UpdateFileFromStreamAsync(
+    public virtual async Task<bool> UpdateFileFromStreamAsync(
         Stream fileStream,
         string filename
     )
@@ -124,7 +126,7 @@ public class AudioManager
             };
 
             using var response = await _client.PutAsync(
-                $"audiotracks/{filename}",
+                _baseUri + $"audiotracks/{filename}",
                 content
             );
             if (response.IsSuccessStatusCode)

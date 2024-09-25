@@ -25,6 +25,10 @@ public class Audiotrack : BaseEntity
 
     public Audiotrack()
     {
+        Id = new();
+        Title = "";
+        AuthorId = new();
+        Filepath = "";
     }
 
     public override bool Equals(object? obj)
@@ -35,10 +39,10 @@ public class Audiotrack : BaseEntity
         }
 
         Audiotrack other = (Audiotrack)obj;
-        return other.Id == Id && 
-               other.Title == Title &&
-               other.AuthorId == AuthorId &&
-               other.Filepath == Filepath;
+        return other.Id == Id
+            && other.Title == Title
+            && other.AuthorId == AuthorId
+            && other.Filepath == Filepath;
     }
 
     public override int GetHashCode() => base.GetHashCode();

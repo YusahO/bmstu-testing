@@ -20,7 +20,7 @@ public class ScoreCoreModelBuilder
 
     public ScoreCoreModelBuilder WithValue(int value)
     {
-        _score.SetValue(value);
+        _score.Value = value;
         return this;
     }
 
