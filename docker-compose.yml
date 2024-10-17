@@ -16,28 +16,10 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - postgresql-testdb
+    environment:
+      BACKEND_TYPE: docker
     ports:
       - "5000:80"
-
-  unit-tests:
-    image: mcr.microsoft.com/dotnet/sdk:8.0
-    depends_on:
-      - mewingpad-app
-    volumes:
-      - .:/app
-      - ./allure-results:/app/Tests/allure-results
-    working_dir: /app
-    command: "dotnet test --filter FullyQualifiedName~UnitTests"
-
-  integration-tests:
-    image: mcr.microsoft.com/dotnet/sdk:8.0
-    depends_on:
-      - mewingpad-app
-    volumes:
-      - .:/app
-      - ./allure-results:/app/Tests/allure-results
-    working_dir: /app
-    command: "dotnet test --filter FullyQualifiedName~IntegrationTests"
   
 volumes:
   pgdata:
