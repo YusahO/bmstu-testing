@@ -1,0 +1,43 @@
+services:
+  postgresql-testdb:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: testdb
+    ports:
+      - 7432:5432
+    volumes:
+      - pgdata:/etc/postgresql/16/main/
+
+  mewingpad-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - postgresql-testdb
+    ports:
+      - "5000:80"
+
+  unit-tests:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    depends_on:
+      - mewingpad-app
+    volumes:
+      - .:/app
+      - ./allure-results:/app/Tests/allure-results
+    working_dir: /app
+    command: "dotnet test --filter FullyQualifiedName~UnitTests"
+
+  integration-tests:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    depends_on:
+      - mewingpad-app
+    volumes:
+      - .:/app
+      - ./allure-results:/app/Tests/allure-results
+    working_dir: /app
+    command: "dotnet test --filter FullyQualifiedName~IntegrationTests"
+  
+volumes:
+  pgdata:

@@ -1,0 +1,14 @@
+name: Test MewingPad
+
+on: [push]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Run unit tests
+        run: docker compose run unit-tests
+      - name: Cleanup
+        run: docker compose down --remove-orphans  
