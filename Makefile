@@ -9,7 +9,7 @@ unit-tests:
 
 concat-reports:
 	mkdir allure-results
-	cp unit-allure-results/* allure-results/
+	cp Tests/unit-allure-results/* allure-results/
 
 .PHONY:
 	generate-allure-report unit-tests concat-reports
