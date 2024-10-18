@@ -21,7 +21,7 @@ public class PgWebApplicationFactory<T> : WebApplicationFactory<T>
     where T : class
 {
     private const string ConnectionString =
-        @"Host=172.19.0.2;Port=5432;Username=postgres;Password=postgres;Database=testdb;Include Error Detail=true";
+        @"Host=localhost;Port=7432;Username=postgres;Password=postgres;Database=testdb;Include Error Detail=true";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

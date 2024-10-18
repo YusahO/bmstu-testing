@@ -5,8 +5,8 @@ namespace MewingPad.Tests.IntegrationTests;
 
 public class DatabaseFixture
 {
-    private const string ConnectionString =
-        @"Host=172.19.0.2;Port=5432;Username=postgres;Password=postgres;Database=testdb;Include Error Detail=true";
+    private string ConnectionString =
+        $"Host=localhost;Port=7432;Username=postgres;Password=postgres;Database=testdb;Include Error Detail=true";
 
     public MewingPadDbContext CreateContext() =>
         new MewingPadDbContext(
