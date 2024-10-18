@@ -17,6 +17,7 @@ services:
     depends_on:
       - postgresql-testdb
     environment:
+      DB_HOST: postgresql-testdb
       BACKEND_TYPE: docker
     ports:
       - "5000:80"

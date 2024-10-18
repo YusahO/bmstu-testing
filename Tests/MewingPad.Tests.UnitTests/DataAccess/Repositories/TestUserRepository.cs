@@ -133,11 +133,9 @@ public class TestUserRepository : BaseRepositoryTestClass
         var userDbo = CreateUserDboFromCore(user);
         List<UserDbModel> userDbos = [userDbo];
 
-        _mockFactory
-            .MockUsersDbSet.Setup(s => s.Update(It.IsAny<UserDbModel>()))
-            .Callback(
-                (UserDbModel a) => userDbos[0].Email = new(expectedEmail)
-            );
+        _mockFactory.MockContext.Setup(m => m.Users).ReturnsDbSet(userDbos);
+
+        user.Email = expectedEmail;
 
         // Act
         await _repository.UpdateUser(user);

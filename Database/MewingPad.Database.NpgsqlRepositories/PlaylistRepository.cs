@@ -145,9 +145,16 @@ public class PlaylistRepository(MewingPadDbContext context)
 
         try
         {
-            _context.Playlists.Update(
-                PlaylistConverter.CoreToDbModel(playlist)
-            );
+            var playlistDbo = await (
+                from p in _context.Playlists
+                where p.Id == playlist.Id
+                select p
+            ).FirstOrDefaultAsync();
+
+            playlistDbo!.Id = playlist.Id;
+            playlistDbo!.Title = playlist.Title;
+            playlistDbo!.UserId = playlist.UserId;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

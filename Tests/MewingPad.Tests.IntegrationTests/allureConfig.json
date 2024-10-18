@@ -1,0 +1,5 @@
+{
+	"allure": {
+	  "directory": "../../../../integration-allure-results"
+	}
+  }

@@ -7,9 +7,20 @@ generate-allure-report:
 unit-tests:
 	dotnet test --filter "FullyQualifiedName~UnitTests"
 
+integration-tests:
+	docker compose up -d
+	dotnet test --filter "FullyQualifiedName~IntegrationTests"
+
+e2e-tests:
+	docker compose up -d
+	dotnet test --filter "FullyQualifiedName~E2ETests"
+	docker compose down
+
 concat-reports:
 	mkdir allure-results
 	cp Tests/unit-allure-results/* allure-results/
+	cp Tests/integration-allure-results/* allure-results/
+	cp Tests/e2e-allure-results/* allure-results/
 
 .PHONY:
-	generate-allure-report unit-tests concat-reports
+	generate-allure-report unit-tests integration-tests e2e-tests concat-reports

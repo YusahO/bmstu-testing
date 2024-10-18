@@ -5,7 +5,6 @@ using MewingPad.Database.Models;
 using MewingPad.Database.NpgsqlRepositories;
 using MewingPad.Services.PlaylistService;
 using MewingPad.Tests.Factories.Core;
-using Microsoft.EntityFrameworkCore;
 
 namespace MewingPad.Tests.IntegrationTests.BusinessLogic;
 
@@ -137,7 +136,7 @@ public class PlaylistServiceIntegrationTest : BaseServiceTestClass
         // Assert
         using var context = Fixture.CreateContext();
         var actual = (from p in context.Playlists select p).ToList();
-        Assert.Empty(actual);
+        Assert.Single(actual);
     }
 
     [Fact]

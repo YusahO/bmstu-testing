@@ -126,13 +126,10 @@ public class TestPlaylistRepository : BaseRepositoryTestClass
         List<PlaylistDbModel> playlistDbos = [playlistDbo];
 
         _mockFactory
-            .MockPlaylistsDbSet.Setup(s =>
-                s.Update(It.IsAny<PlaylistDbModel>())
-            )
-            .Callback(
-                (PlaylistDbModel a) =>
-                    playlistDbos[0].Title = new(expectedTitle)
-            );
+            .MockContext.Setup(m => m.Playlists)
+            .ReturnsDbSet(playlistDbos);
+
+        playlist.Title = expectedTitle;
 
         // Act
         await _repository.UpdatePlaylist(playlist);

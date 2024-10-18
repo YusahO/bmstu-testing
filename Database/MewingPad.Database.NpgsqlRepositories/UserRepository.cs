@@ -120,7 +120,18 @@ public class UserRepository(MewingPadDbContext context) : IUserRepository
 
         try
         {
-            _context.Users.Update(UserConverter.CoreToDbModel(user));
+            var userDbo = await (
+                from u in _context.Users
+                where u.Id == user.Id
+                select u
+            ).FirstOrDefaultAsync();
+
+            userDbo!.Id = user.Id;
+            userDbo!.Role = user.Role;
+            userDbo!.Email = user.Email;
+            userDbo!.Username = user.Username;
+            userDbo!.PasswordHashed = user.PasswordHashed;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

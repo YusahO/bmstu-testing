@@ -122,9 +122,17 @@ public class AudiotrackRepository(MewingPadDbContext context)
 
         try
         {
-            _context.Audiotracks.Update(
-                AudiotrackConverter.CoreToDbModel(audiotrack)
-            );
+            var audiotrackDbo = await (
+                from a in _context.Audiotracks
+                where a.Id == audiotrack.Id
+                select a
+            ).FirstOrDefaultAsync();
+
+            audiotrackDbo!.Id = audiotrack.Id;
+            audiotrackDbo!.Title = audiotrack.Title;
+            audiotrackDbo!.AuthorId = audiotrack.AuthorId;
+            audiotrackDbo!.Filepath = audiotrack.Filepath;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

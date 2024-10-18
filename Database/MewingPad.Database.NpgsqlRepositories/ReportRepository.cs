@@ -1,4 +1,5 @@
 using MewingPad.Common.Entities;
+using MewingPad.Common.Enums;
 using MewingPad.Common.Exceptions;
 using MewingPad.Common.IRepositories;
 using MewingPad.Database.Context;
@@ -79,7 +80,18 @@ public class ReportRepository(MewingPadDbContext context) : IReportRepository
 
         try
         {
-            _context.Reports.Update(ReportConverter.CoreToDbModel(report));
+            var reportDbo = await (
+                from r in _context.Reports
+                where r.AuthorId == report.AuthorId
+                select r
+            ).FirstOrDefaultAsync();
+
+            reportDbo!.Id = report.Id;
+            reportDbo!.Text = report.Text;
+            reportDbo!.Status = report.Status;
+            reportDbo!.AuthorId = report.AuthorId;
+            reportDbo!.AudiotrackId = report.AudiotrackId;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

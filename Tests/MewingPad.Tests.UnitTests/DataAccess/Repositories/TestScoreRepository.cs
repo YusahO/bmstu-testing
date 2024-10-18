@@ -107,8 +107,8 @@ public class TestScoreRepository : BaseRepositoryTestClass
         List<ScoreDbModel> scoreDbos = [scoreDbo];
 
         _mockFactory
-            .MockScoresDbSet.Setup(s => s.Update(It.IsAny<ScoreDbModel>()))
-            .Callback((ScoreDbModel s) => scoreDbos[0].Value = expectedValue);
+            .MockContext.Setup(s => s.Scores)
+            .ReturnsDbSet(scoreDbos);
 
         // Act
         await _repository.UpdateScore(score);

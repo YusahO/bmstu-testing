@@ -2,7 +2,6 @@ using MewingPad.Common.Exceptions;
 using MewingPad.Database.Context;
 using MewingPad.Database.NpgsqlRepositories;
 using MewingPad.Services.CommentaryService;
-using Microsoft.EntityFrameworkCore;
 
 namespace MewingPad.Tests.IntegrationTests.BusinessLogic;
 
@@ -101,8 +100,6 @@ public class CommentaryServiceIntegrationTest : BaseServiceTestClass
     [Fact]
     public async Task UpdateCommentary_CommentaryExists_Ok()
     {
-        using var context = Fixture.CreateContext();
-
         // Arrange
         await AddDefaultUserWithPlaylist();
         await AddDefaultAudiotrack();
@@ -114,8 +111,13 @@ public class CommentaryServiceIntegrationTest : BaseServiceTestClass
             .WithText("AAAA")
             .Build();
 
-        context.Add(comment);
-        context.SaveChanges();
+        using (var context = Fixture.CreateContext())
+        {
+            await context.AddAsync(comment);
+            await context.SaveChangesAsync();
+        }
+
+        const string expectedText = "Text";
 
         // Act
         var actual = await _service.UpdateCommentary(
@@ -123,13 +125,13 @@ public class CommentaryServiceIntegrationTest : BaseServiceTestClass
                 .WithId(DefaultCommentaryId)
                 .WithAudiotrackId(DefaultAudiotrackId)
                 .WithAuthorId(DefaultUserId)
-                .WithText("Text")
+                .WithText(expectedText)
                 .Build()
         );
 
         // Assert
         Assert.Equal(comment.Id, actual.Id);
-        Assert.Equal(comment.Text, actual.Text);
+        Assert.Equal(expectedText, actual.Text);
     }
 
     [Fact]

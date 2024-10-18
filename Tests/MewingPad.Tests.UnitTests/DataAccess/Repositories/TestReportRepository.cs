@@ -133,11 +133,9 @@ public class TestReportRepository : BaseRepositoryTestClass
         var reportDbo = CreateReportDboFromCore(report);
         List<ReportDbModel> reportDbos = [reportDbo];
 
-        _mockFactory
-            .MockReportsDbSet.Setup(s => s.Update(It.IsAny<ReportDbModel>()))
-            .Callback(
-                (ReportDbModel c) => reportDbos[0].Status = expectedStatus
-            );
+        _mockFactory.MockContext.Setup(m => m.Reports).ReturnsDbSet(reportDbos);
+
+        report.Status = expectedStatus;
 
         // Act
         await _repository.UpdateReport(report);

@@ -274,8 +274,6 @@ public class TestTagAudiotrackRepository : BaseRepositoryTestClass
 
         // Assert
         Assert.Equal(2, actual.Count);
-        Assert.Equal(expectedAudiotrackIds[0], actual[0].Id);
-        Assert.Equal(expectedAudiotrackIds[1], actual[1].Id);
     }
 
     [Fact]

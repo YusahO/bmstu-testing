@@ -94,7 +94,16 @@ public class TagRepository(MewingPadDbContext context) : ITagRepository
 
         try
         {
-            _context.Tags.Update(TagConverter.CoreToDbModel(tag));
+            var tagDbo = await (
+                from t in _context.Tags
+                where t.Id == tag.Id
+                select t
+            ).FirstOrDefaultAsync();
+
+            tagDbo!.Id = tag.Id;
+            tagDbo!.Name = tag.Name;
+            tagDbo!.AuthorId = tag.AuthorId;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

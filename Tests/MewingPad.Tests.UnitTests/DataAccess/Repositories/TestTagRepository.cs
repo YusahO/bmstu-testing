@@ -133,17 +133,13 @@ public class TestTagRepository : BaseRepositoryTestClass
         Guid expectedAuthorId = MakeGuid(1);
         const string expectedName = "name";
 
-        var tag = CreateTagCoreModel(
-            expectedTagId,
-            expectedAuthorId,
-            expectedName
-        );
+        var tag = CreateTagCoreModel(expectedTagId, expectedAuthorId, "Old");
         var tagDbo = CreateTagDboFromCore(tag);
         List<TagDbModel> tagDbos = [tagDbo];
 
-        _mockFactory
-            .MockTagsDbSet.Setup(s => s.Update(It.IsAny<TagDbModel>()))
-            .Callback((TagDbModel s) => tagDbos[0].Name = new(expectedName));
+        _mockFactory.MockContext.Setup(m => m.Tags).ReturnsDbSet(tagDbos);
+
+        tag.Name = expectedName;
 
         // Act
         await _repository.UpdateTag(tag);

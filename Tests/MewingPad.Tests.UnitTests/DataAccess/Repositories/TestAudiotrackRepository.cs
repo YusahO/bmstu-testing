@@ -130,14 +130,11 @@ public class TestAudiotrackRepository : BaseRepositoryTestClass
         var audiotrackDbo = CreateAudiotrackDboFromCore(audiotrack);
         List<AudiotrackDbModel> audiotrackDbos = [audiotrackDbo];
 
+        audiotrack.Title = expectedTitle;
+
         _mockFactory
-            .MockAudiotracksDbSet.Setup(s =>
-                s.Update(It.IsAny<AudiotrackDbModel>())
-            )
-            .Callback(
-                (AudiotrackDbModel a) =>
-                    audiotrackDbos[0].Title = new(expectedTitle)
-            );
+            .MockContext.Setup(s => s.Audiotracks)
+            .ReturnsDbSet(audiotrackDbos);
 
         // Act
         await _repository.UpdateAudiotrack(audiotrack);

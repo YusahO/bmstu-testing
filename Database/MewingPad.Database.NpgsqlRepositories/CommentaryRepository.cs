@@ -1,4 +1,3 @@
-using System.Data.SqlClient;
 using MewingPad.Common.Entities;
 using MewingPad.Common.Exceptions;
 using MewingPad.Common.IRepositories;
@@ -105,9 +104,17 @@ public class CommentaryRepository(MewingPadDbContext context)
 
         try
         {
-            _context.Commentaries.Update(
-                CommentaryConverter.CoreToDbModel(commentary)
-            );
+            var commentaryDbo = await (
+                from c in _context.Commentaries
+                where c.Id == commentary.Id
+                select c
+            ).FirstOrDefaultAsync();
+
+            commentaryDbo!.Id = commentary.Id;
+            commentaryDbo!.Text = commentary.Text;
+            commentaryDbo!.AuthorId = commentary.AuthorId;
+            commentaryDbo!.AudiotrackId = commentary.AudiotrackId;
+
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

@@ -20,9 +20,7 @@ using System.IdentityModel.Tokens.Jwt;
 using MewingPad.Database.Context.Roles;
 using MewingPad.Providers;
 
-using Whatever;
-
-internal class Program
+public partial class Program
 {
     private static async Task Main(string[] args)
     {
@@ -155,7 +153,7 @@ internal class Program
                 app.UseSwaggerUI();
                 app.UseDeveloperExceptionPage();
             }
-            app.Services.SaveSwaggerYaml();
+            
             app.UseCors(b => b.WithOrigins("http://localhost:3000")
                               .AllowAnyHeader()
                               .AllowAnyMethod()

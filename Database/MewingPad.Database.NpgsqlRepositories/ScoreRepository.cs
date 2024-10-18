@@ -122,11 +122,17 @@ public class ScoreRepository(MewingPadDbContext context) : IScoreRepository
 
         try
         {
-            var scoreDbModel = await _context.Scores.FindAsync(
-                [score.AuthorId, score.AudiotrackId]
-            );
+            var scoreDbo = await (
+                from s in _context.Scores
+                where
+                    s.AuthorId == score.AuthorId
+                    && s.AudiotrackId == score.AudiotrackId
+                select s
+            ).FirstOrDefaultAsync();
 
-            _context.Scores.Update(ScoreConverter.CoreToDbModel(score));
+            scoreDbo!.AudiotrackId = score.AudiotrackId;
+            scoreDbo!.AuthorId = score.AuthorId;
+            scoreDbo!.Value = score.Value;
             await _context.SaveChangesAsync();
         }
         catch (Exception ex)

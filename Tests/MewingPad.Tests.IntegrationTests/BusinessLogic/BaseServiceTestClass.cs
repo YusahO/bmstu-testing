@@ -47,7 +47,7 @@ public class BaseServiceTestClass(DatabaseFixture fixture) : IAsyncLifetime
         var audiotrack = new AudiotrackDbModelBuilder()
             .WithId(audiotrackId)
             .WithAuthorId(DefaultUserId)
-            .WithFilepath("/path/to/file")
+            .WithFilepath("file.mp3")
             .WithTitle("Title")
             .Build();
         await context.Audiotracks.AddAsync(audiotrack);

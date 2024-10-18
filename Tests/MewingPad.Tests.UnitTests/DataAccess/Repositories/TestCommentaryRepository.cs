@@ -171,19 +171,16 @@ public class TestCommentaryRepository : BaseRepositoryTestClass
             expectedId,
             expectedAuthorId,
             expectedAudiotrackId,
-            expectedText
+            "Old"
         );
         var commentaryDbo = CreateCommentaryDboFromCore(commentary);
         List<CommentaryDbModel> commentaryDbos = [commentaryDbo];
 
         _mockFactory
-            .MockCommentariesDbSet.Setup(s =>
-                s.Update(It.IsAny<CommentaryDbModel>())
-            )
-            .Callback(
-                (CommentaryDbModel c) =>
-                    commentaryDbos[0].Text = new(expectedText)
-            );
+            .MockContext.Setup(m => m.Commentaries)
+            .ReturnsDbSet(commentaryDbos);
+        
+        commentary.Text = expectedText;
 
         // Act
         await _repository.UpdateCommentary(commentary);
