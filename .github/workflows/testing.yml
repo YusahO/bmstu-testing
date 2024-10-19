@@ -17,15 +17,15 @@ jobs:
       - run: dotnet restore
       
       - name: Run unit tests
-        run: make unit-tests -i
+        run: make unit-tests
 
       - name: Run integration tests
         if: '!failure()'
-        run: make integration-tests -i
+        run: make integration-tests
 
       - name: Run e2e tests
         if: '!failure()'
-        run: make e2e-tests -i
+        run: make e2e-tests
   
       - name: Processing report data
         run: make concat-reports -i
