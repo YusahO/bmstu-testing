@@ -15,55 +15,41 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - run: dotnet restore
-
-  unit-tests:    
-    runs-on: ubuntu-latest
-    steps:
+      
       - name: Run unit tests
         run: make unit-tests -i
+
+      - name: Run integration tests
+        run: make integration-tests -i
+
+      - name: Run e2e tests
+        run: make e2e-tests -i
   
-  integration-tests:
-    runs-on: ubuntu-latest
-    needs: unit-tests
-    steps:
-    - name: Run integration tests
-      run: make integration-tests -i
+      - name: Processing report data
+        run: make concat-reports -i
+        if: always()
+        continue-on-error: true
 
-  e2e-tests:
-    runs-on: ubuntu-latest
-    needs: integration-tests
-    steps:
-    - name: Run e2e tests
-      run: make e2e-tests -i
+      - name: Load test report history
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
 
-  build-report:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Processing report data
-      run: make concat-reports -i
-      if: always()
-      continue-on-error: true
+      - name: Build test report
+        uses: simple-elf/allure-report-action@v1.7
+        if: always()
+        with:
+          gh_pages: gh-pages
+          allure_history: allure-history
+          allure_results: allure-results
 
-    - name: Load test report history
-      uses: actions/checkout@v4
-      if: always()
-      continue-on-error: true
-      with:
-        ref: gh-pages
-        path: gh-pages
-
-    - name: Build test report
-      uses: simple-elf/allure-report-action@v1.7
-      if: always()
-      with:
-        gh_pages: gh-pages
-        allure_history: allure-history
-        allure_results: allure-results
-
-    - name: Publish test report
-      uses: peaceiris/actions-gh-pages@v3
-      if: always()
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_branch: gh-pages
-        publish_dir: allure-history
+      - name: Publish test report
+        uses: peaceiris/actions-gh-pages@v3
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
