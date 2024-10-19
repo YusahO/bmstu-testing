@@ -20,9 +20,11 @@ jobs:
         run: make unit-tests -i
 
       - name: Run integration tests
+        if: '!failure()'
         run: make integration-tests -i
 
       - name: Run e2e tests
+        if: '!failure()'
         run: make e2e-tests -i
   
       - name: Processing report data
