@@ -23,7 +23,7 @@ services:
       POSTGRES_PORT: 5432
       BACKEND_TYPE: docker
     ports:
-      - "5000:80"
+      - "9898:9898"
   
 volumes:
   pgdata:

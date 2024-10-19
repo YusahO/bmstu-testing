@@ -153,7 +153,7 @@ public partial class Program
                 app.UseSwaggerUI();
                 app.UseDeveloperExceptionPage();
             }
-            
+
             app.UseCors(b => b.WithOrigins("http://localhost:3000")
                               .AllowAnyHeader()
                               .AllowAnyMethod()
@@ -168,7 +168,7 @@ public partial class Program
             app.UseHttpsRedirection();
             app.MapControllers();
 
-            await app.CreateAdministrator();
+            // await app.CreateAdministrator();
 
             await app.RunAsync();
         }
